@@ -1,0 +1,96 @@
+{
+  "projectType": "saas",
+  "projectName": "Crepes & Waffles Coworking",
+  "projectDescription": "A real-time coworking space reservation system for professionals and employees to book workstations with automated attendance verification.",
+  "theme": "almond",
+  "primaryColor": "#92614F",
+  "lightColor": "#E8D5C4",
+  "darkColor": "#503629",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "installation"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/room-selection",
+              "features/reservations",
+              "features/attendance-verification",
+              "features/admin-panel"
+            ]
+          },
+          {
+            "group": "Configuration",
+            "pages": [
+              "configuration/environment",
+              "configuration/realtime-sync",
+              "configuration/geolocation"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Services",
+            "pages": [
+              "api/reservas-service",
+              "api/geolocation-service",
+              "api/axios-instance"
+            ]
+          },
+          {
+            "group": "Hooks",
+            "pages": [
+              "api/use-realtime-sync",
+              "api/use-auto-cancelar"
+            ]
+          },
+          {
+            "group": "Components",
+            "pages": [
+              "api/validar-cedula",
+              "api/bienvenida",
+              "api/salas",
+              "api/reservas",
+              "api/panel"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Real-time reservation synchronization via WebSocket",
+    "Workstation booking with room selection",
+    "Geolocation-based attendance verification",
+    "Auto-cancellation of unconfirmed reservations",
+    "Admin panel for reservation management",
+    "Employee authentication via ID number",
+    "Multiple time slot options (morning, afternoon, full day)"
+  ],
+  "publicApiSurface": [
+    "getReservas(filters)",
+    "createReservaRecord(reservaData)",
+    "updateReservaRecord(id, reservaData)",
+    "deleteReservaRecord(id)",
+    "cancelReserva(id, currentReserva, motivo)",
+    "cancelarReservasVencidas()",
+    "getEscritoriosDisponibles(fecha)",
+    "useRealtimeSync(onSync)",
+    "useAutoCancelarReservas(enabled)",
+    "verifyAttendance(reserva, currentLocation)",
+    "getCurrentPosition()",
+    "calculateDistance(lat1, lon1, lat2, lon2)"
+  ]
+}
