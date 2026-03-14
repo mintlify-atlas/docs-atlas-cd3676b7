@@ -1,0 +1,185 @@
+---
+title: Reservations
+description: Complete guide to booking workstations in the coworking system
+---
+
+## Overview
+
+The reservation system allows users to book specific workstations for morning, afternoon, or full-day sessions. The interface features an interactive map showing real-time availability and a booking card for confirming your selection.
+
+## Making a Reservation
+
+<Steps>
+  <Step title="Select a date">
+    Use the date navigator at the top to choose from the next 2 business days (weekdays only). The system skips weekends automatically.
+  </Step>
+
+  <Step title="View the interactive map">
+    The workstation map shows 6 desks around a central table. Each desk displays:
+    - **Green chair**: Fully available
+    - **Yellow chair**: Partially available (one time slot taken)
+    - **Red chair**: Fully occupied (all time slots taken)
+  </Step>
+
+  <Step title="Check who's reserved">
+    The right panel (desktop) or drawer (mobile) shows current reservations for each workstation, including user names and time slots.
+  </Step>
+
+  <Step title="Select your workstation">
+    Click on an available desk. The chair will highlight with a glow effect. Desks 1, 3, and 6 include support monitors.
+  </Step>
+
+  <Step title="Choose your time slot">
+    In the booking card that appears:
+    - **Mañana (AM)**: 8:00 am – 12:00 pm
+    - **Tarde (PM)**: 1:00 pm – 5:00 pm
+    - **Día completo (Full day)**: 8:00 am – 5:00 pm
+
+    Unavailable time slots are greyed out.
+  </Step>
+
+  <Step title="Confirm your reservation">
+    Review your selection and click the "Reservar" button to complete your booking.
+  </Step>
+</Steps>
+
+## Reservation Rules
+
+### Rotation Policy
+
+<Warning>
+You must rotate workstations between reservations. If your last active reservation was at Desk 3, you cannot book Desk 3 for your next reservation.
+</Warning>
+
+The system enforces rotation by:
+- Checking your reservation history automatically
+- Blocking your previous desk from selection
+- Showing a rotation message with your last desk and date
+
+**Example rotation message**:  
+*"Tu última reserva fue el 12/03/2026 en el escritorio 3. Debes hacer rotación y elegir otro escritorio."*
+
+### One Reservation Per Day
+
+<Note>
+You can only have one active reservation per day. If you already have a reservation, the system will prevent duplicate bookings.
+</Note>
+
+### Time Restrictions
+
+**Early morning limitation**:  
+Between 12:00 AM and 5:00 AM, you cannot reserve for dates beyond tomorrow. This prevents late-night bookings too far in advance.
+
+**Conflicting time slots**:  
+- If someone books the AM slot, the "Full Day" option becomes unavailable
+- If someone books the PM slot, the "Full Day" option becomes unavailable
+- If someone books "Full Day," both AM and PM become unavailable
+
+## Booking Card Details
+
+### User Information
+
+Your booking card displays:
+- Your profile photo (or placeholder)
+- Full name
+- Job title (cargo)
+- Department area
+
+### Location Details
+
+- **Workstation number**: "Escritorio 1" through "Escritorio 6"
+- **Monitor badge**: Appears for desks 1, 3, and 6
+
+### Time Slot Selection
+
+Each time slot button shows:
+- **Label**: Mañana, Tarde, or Día completo
+- **Time range**: Exact hours for the shift
+- **Availability**: Active/disabled state
+
+## Real-Time Occupancy Panel
+
+### Desktop View
+
+The right panel shows all 6 workstations with:
+- Current occupants (name + photo)
+- Time slot badges (AM, PM, or "Todo el día")
+- "Disponible" label for empty desks
+
+### Mobile View
+
+Tap the floating "Escritorios" button to open a drawer showing the same occupancy information.
+
+<Info>
+The occupancy panel updates automatically when reservations are made, ensuring you always see current availability.
+</Info>
+
+## Workstations with Monitors
+
+Three workstations include support monitors:
+
+<CardGroup cols={3}>
+  <Card title="Escritorio 1" icon="monitor">
+    Top-left position with monitor support
+  </Card>
+  <Card title="Escritorio 3" icon="monitor">
+    Top-right position with monitor support
+  </Card>
+  <Card title="Escritorio 6" icon="monitor">
+    Bottom-right position with monitor support
+  </Card>
+</CardGroup>
+
+## Error Messages
+
+### Common Validation Messages
+
+| Message | Meaning |
+|---------|----------|
+| **"Ya tienes una reserva para este día"** | You already have an active reservation for the selected date |
+| **"Este turno ya no está disponible"** | Another user just booked this time slot |
+| **"Debes hacer rotación"** | You must choose a different desk from your last reservation |
+| **"Este escritorio no tiene turnos disponibles"** | All time slots for this desk are taken |
+| **"La ventana de confirmación no está activa"** | Reservation window is outside allowed hours |
+
+### Time Restriction Message
+
+<Warning>
+"No puede reservar para pasado mañana (o fechas posteriores) entre 12:00 am y 5:00 am."
+</Warning>
+
+This appears when attempting to book beyond tomorrow during early morning hours (12:00 AM - 5:00 AM).
+
+## Success Confirmation
+
+After a successful reservation:
+1. A "Reservado!" message appears in the booking card
+2. The workstation map refreshes automatically
+3. The booking card closes after 2.5 seconds
+4. A custom event is dispatched to update other views
+
+## Navigation Options
+
+- **Date navigator**: Switch between available business days
+- **Panel button**: View your reservations (or admin panel)
+- **Logout button**: Sign out of the system
+- **Back button**: Return to room selection
+
+## Visual Legend
+
+At the bottom of the reservation page:
+
+- **Disponible (Green)**: Workstation has time slots available
+- **Limitado (Yellow)**: Workstation is partially booked
+- **Ocupado (Red)**: Workstation is fully booked for the day
+- **Monitor icon**: Indicates which desks (1, 3, 6) have monitors
+
+<Note>
+The system automatically filters out weekends when generating available dates, showing only Monday through Friday.
+</Note>
+
+## Next Steps
+
+After making a reservation:
+1. Navigate to the [Admin Panel](/features/admin-panel) to view your bookings
+2. On reservation day, use [Attendance Verification](/features/attendance-verification) to confirm your presence

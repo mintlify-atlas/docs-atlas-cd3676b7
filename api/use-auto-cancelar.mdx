@@ -1,0 +1,213 @@
+---
+title: 'useAutoCancelarReservas'
+description: 'Automatic cancellation of expired reservations during working hours'
+---
+
+## Overview
+
+The `useAutoCancelarReservas` hook automatically cancels expired pending reservations during working hours. It runs periodic checks to identify reservations that have passed their confirmation deadline and cancels them automatically.
+
+## Signature
+
+```javascript
+useAutoCancelarReservas(enabled)
+```
+
+## Parameters
+
+<ParamField path="enabled" type="boolean" default="true">
+  Enable or disable automatic cancellation of expired reservations.
+  
+  When `true`, the hook will:
+  - Run an immediate check on mount
+  - Schedule hourly checks during working hours
+  - Cancel reservations that have passed their confirmation window
+  
+  When `false`, the hook does nothing.
+</ParamField>
+
+## Return Value
+
+This hook does not return any value. It operates as a side effect.
+
+## How It Works
+
+### 1. Working Hours Detection
+
+The hook only processes cancellations during defined working hours:
+- **Start:** 5:00 AM
+- **End:** 5:00 PM (17:00)
+
+Outside these hours, the hook skips processing to avoid unnecessary operations.
+
+### 2. Automatic Cancellation Process
+
+Every hour during working hours, the hook:
+
+1. Fetches all pending reservations for today
+2. Evaluates each reservation against schedule windows
+3. Cancels reservations that have passed their confirmation deadline
+4. Logs the number of canceled reservations
+
+### 3. Cancellation Criteria
+
+Reservations are canceled when:
+- Status is `'Pendiente'` (Pending)
+- The confirmation window has expired (determined by `evaluateReservationStatus`)
+- The system time is within working hours
+
+### 4. Cancellation Details
+
+When a reservation is auto-canceled:
+- **Estado:** Set to `'Cancelada'`
+- **Motivo:** `"Reserva cancelada por falta de confirmacion"`
+- **Tipo de verificación:** `'auto-cancelacion'`
+- **Timestamp:** Current date/time recorded
+
+## Configuration
+
+The hook uses internal constants for working hours:
+
+<ParamField path="WORK_START_HOUR" type="number" default="5">
+  Hour when automatic cancellation begins (5 AM)
+</ParamField>
+
+<ParamField path="WORK_END_HOUR" type="number" default="17">
+  Hour when automatic cancellation ends (5 PM)
+</ParamField>
+
+## Usage Examples
+
+<CodeGroup>
+```javascript App.jsx (Enabled)
+import useAutoCancelarReservas from './hooks/useAutoCancelarReservas';
+
+function App() {
+  // Enable automatic cancellation
+  useAutoCancelarReservas(true);
+  
+  return (
+    <div className="App">
+      {/* Your app routes */}
+    </div>
+  );
+}
+
+export default App;
+```
+
+```javascript Disabled
+import useAutoCancelarReservas from './hooks/useAutoCancelarReservas';
+
+function App() {
+  // Disable automatic cancellation
+  useAutoCancelarReservas(false);
+  
+  return <div>App content</div>;
+}
+```
+
+```javascript Conditional
+import { useState } from 'react';
+import useAutoCancelarReservas from './hooks/useAutoCancelarReservas';
+
+function AdminPanel() {
+  const [autoCancelEnabled, setAutoCancelEnabled] = useState(true);
+  
+  // Enable/disable based on state
+  useAutoCancelarReservas(autoCancelEnabled);
+  
+  return (
+    <div>
+      <label>
+        <input 
+          type="checkbox" 
+          checked={autoCancelEnabled}
+          onChange={(e) => setAutoCancelEnabled(e.target.checked)}
+        />
+        Enable Auto-Cancellation
+      </label>
+    </div>
+  );
+}
+```
+</CodeGroup>
+
+## Execution Schedule
+
+### On Component Mount
+
+If enabled and within working hours, the hook immediately checks for expired reservations.
+
+### Hourly Interval
+
+A check runs every 60 minutes (3,600,000 milliseconds) during the component's lifetime.
+
+**Example Timeline:**
+```
+8:00 AM - Component mounts → Immediate check
+9:00 AM - Hourly check runs
+10:00 AM - Hourly check runs
+...
+5:00 PM - Outside working hours → Check skipped
+```
+
+## Dependencies
+
+This hook depends on:
+
+### `cancelarReservasVencidas()`
+
+From `utils/reservasService.js` - Handles the actual cancellation logic:
+
+1. Fetches working schedule (horarios)
+2. Gets pending reservations for today
+3. Evaluates each reservation status
+4. Updates reservations that should be canceled
+5. Returns count and message
+
+**Return Value:**
+```javascript
+{
+  canceled: 2, // Number of reservations canceled
+  message: "2 reserva(s) cancelada(s) automáticamente"
+}
+```
+
+## Error Handling
+
+Errors during the cancellation process are caught and logged to the console:
+
+```javascript
+console.error('Error en auto-cancelación de reservas:', error);
+```
+
+The hook continues operating normally after errors - the next hourly check will retry.
+
+## Cleanup
+
+The hook automatically cleans up when the component unmounts:
+- Clears the hourly interval
+- Sets `isMounted` flag to prevent state updates after unmount
+
+No manual cleanup is required.
+
+## Notes
+
+<Note>
+  This hook should typically be placed at the app's root level (in `App.jsx`) to ensure it runs throughout the application's lifecycle.
+</Note>
+
+<Note>
+  The hook respects working hours to avoid unnecessary API calls during off-hours when no users are actively making reservations.
+</Note>
+
+<Note>
+  Canceled reservations trigger the `working-reservas-updated` event, which causes other components using `useRealtimeSync` to refresh their data.
+</Note>
+
+## Related
+
+- [useRealtimeSync](/api/use-realtime-sync) - Real-time data synchronization
+- [Reservas Service](/api/reservas-service) - Reservation data management
+- [cancelarReservasVencidas](/api/reservas-service#cancelar-reservas-vencidas) - Core cancellation logic

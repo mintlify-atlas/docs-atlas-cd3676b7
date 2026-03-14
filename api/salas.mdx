@@ -1,0 +1,271 @@
+---
+title: 'Salas Component'
+description: 'Room selection interface with availability display'
+icon: 'door-open'
+---
+
+## Overview
+
+The `Salas` component displays available coworking rooms and allows users to select one to proceed with their desk reservation.
+
+**Route:** `/salas`
+
+## Component Purpose
+
+- Displays all available coworking rooms from Strapi CMS
+- Shows room capacity and monitor availability
+- Indicates room status (Available/Coming Soon)
+- Allows admin users to access the admin panel
+
+## API Integration
+
+### Fetch Rooms Endpoint
+
+```javascript
+GET https://macfer.crepesywaffles.com/api/working-salas?populate=foto&sort=id:asc
+```
+
+**Response Structure:**
+```json
+{
+  "data": [
+    {
+      "id": 1,
+      "attributes": {
+        "nombre": "Sala Principal",
+        "capacidad": 6,
+        "monitores": 3,
+        "disponible": true,
+        "foto": {
+          "data": [
+            {
+              "attributes": {
+                "url": "/uploads/sala1.jpg"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ]
+}
+```
+
+## State Management
+
+<ParamField path="salas" type="array">
+  Array of normalized room objects from the API.
+</ParamField>
+
+<ParamField path="loading" type="boolean">
+  Indicates whether rooms are being fetched.
+</ParamField>
+
+<ParamField path="error" type="string | null">
+  Stores error messages if room loading fails.
+</ParamField>
+
+## Props via Location State
+
+<ParamField path="datosEmpleado" type="object">
+  Employee data passed through the navigation flow.
+</ParamField>
+
+## Key Constants
+
+```javascript Constants
+const BASE      = 'https://macfer.crepesywaffles.com';
+const API_SALAS = `${BASE}/api/working-salas`;
+const ADMINS    = ["1028783377"];
+```
+
+## Data Normalization
+
+The `normalizeSala` function transforms Strapi API responses into a consistent format:
+
+<CodeGroup>
+```javascript Normalize Function
+const normalizeSala = (item) => {
+  const a = item.attributes ?? item;
+
+  // Handle image URLs from Strapi media library
+  let imagenUrl = null;
+  const fotoArr = a.foto?.data;
+  if (Array.isArray(fotoArr) && fotoArr.length > 0) {
+    const url = fotoArr[0].attributes?.url;
+    if (url) imagenUrl = url.startsWith('http') ? url : `${BASE}${url}`;
+  }
+
+  return {
+    id:         item.id,
+    nombre:     a.nombre ?? a.name ?? `Sala ${item.id}`,
+    capacidad:  a.capacidad ?? 0,
+    monitores:  a.monitores ?? 0,
+    imagen:     imagenUrl,
+    disponible: a.disponible !== false,
+    ruta:       '/reservas',
+  };
+};
+```
+</CodeGroup>
+
+## SalaCard Component
+
+Individual room card with hover effects and status indicators:
+
+<Tabs>
+  <Tab title="Available Room">
+    - Clickable with hover animation
+    - Shows capacity and monitor count
+    - "Disponible" badge with green styling
+    - Arrow icon on hover
+  </Tab>
+  <Tab title="Coming Soon">
+    - Non-clickable with overlay
+    - Grayscale filter on image
+    - "Próximamente" badge
+    - Reduced opacity
+  </Tab>
+</Tabs>
+
+### Card Features
+
+<ParamField path="sala.nombre" type="string">
+  Room name displayed in the card header
+</ParamField>
+
+<ParamField path="sala.capacidad" type="number">
+  Total desk capacity with chair icon
+</ParamField>
+
+<ParamField path="sala.monitores" type="number">
+  Number of desks with monitors (only shown if > 0)
+</ParamField>
+
+<ParamField path="sala.imagen" type="string">
+  Room image URL with fallback to default mesa.png
+</ParamField>
+
+## Admin Detection
+
+Checks if the current user is an admin:
+
+```javascript Admin Check
+const usuario  = location.state?.datosEmpleado || null;
+const esAdmin  = ADMINS.includes(
+  usuario?.documento ?? usuario?.document_number ?? ''
+);
+```
+
+## Navigation Actions
+
+### Top Navigation Buttons
+
+<CodeGroup>
+```jsx Navigation Buttons
+<button
+  className="btn-outline top-nav-icon-btn"
+  onClick={() => navigate('/panel', { state: { datosEmpleado: usuario } })}
+  title={esAdmin ? 'Panel Admin' : 'Mis Reservas'}
+>
+  <Armchair size={14} strokeWidth={2.5} />
+</button>
+
+<button
+  className="btn-outline top-nav-icon-btn"
+  onClick={() => navigate('/')}
+  title="Cerrar sesión"
+>
+  <LogOut size={14} strokeWidth={2} />
+</button>
+
+<button
+  className="btn-outline reservas-btn-atras top-nav-icon-btn"
+  onClick={() => navigate(-1)}
+  title="Volver"
+>
+  <ArrowLeft size={14} strokeWidth={2.5} />
+</button>
+```
+</CodeGroup>
+
+## Room Selection Flow
+
+When a user clicks on an available room:
+
+```javascript Room Click Handler
+onClick={() => navigate(sala.ruta, {
+  state: {
+    datosEmpleado: usuario,
+    salaId: sala.id,
+    salaNombre: sala.nombre
+  }
+})}
+```
+
+<Note>
+  The room ID and name are passed to the Reservas component for desk selection.
+</Note>
+
+## Loading States
+
+<Tabs>
+  <Tab title="Loading">
+    ```jsx
+    <div className="salas-state-msg">
+      Cargando salas…
+    </div>
+    ```
+  </Tab>
+  <Tab title="Error">
+    ```jsx
+    <p style={{ color: '#c0392b' }}>
+      {error}
+    </p>
+    ```
+  </Tab>
+  <Tab title="Empty">
+    ```jsx
+    <p className="text-muted">
+      No hay salas registradas.
+    </p>
+    ```
+  </Tab>
+</Tabs>
+
+## Icons Used
+
+- **Armchair** (`lucide-react`): Capacity indicator
+- **Monitor** (`lucide-react`): Monitor availability
+- **LogOut** (`lucide-react`): Logout button
+- **ArrowLeft** (`lucide-react`): Back navigation
+- **ArrowRight** (`lucide-react`): Room selection indicator
+
+## Code Example
+
+<CodeGroup>
+```javascript Room Loading
+const cargarSalas = useCallback(async () => {
+  setLoading(true);
+  setError(null);
+  try {
+    const response = await fetch(
+      `${API_SALAS}?populate=foto&sort=id:asc`
+    );
+    const json = await response.json();
+    const data = Array.isArray(json.data) ? json.data : [];
+    setSalas(data.map(normalizeSala));
+  } catch {
+    setError('No se pudieron cargar las salas.');
+  } finally {
+    setLoading(false);
+  }
+}, []);
+```
+</CodeGroup>
+
+## Related Components
+
+- [Bienvenida](/api/bienvenida) - Previous step in flow
+- [Reservas](/api/reservas) - Next step (desk selection)
+- [Panel](/api/panel) - Admin panel and user reservations

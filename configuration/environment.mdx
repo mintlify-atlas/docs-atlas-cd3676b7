@@ -1,0 +1,273 @@
+---
+title: Environment Variables
+description: Configure your Crepes & Waffles Coworking application with environment variables for API endpoints, WebSocket connections, and polling intervals.
+---
+
+## Overview
+
+The Crepes & Waffles Coworking system uses environment variables to configure critical runtime settings. Since this is a Vite-based React application, all environment variables must be prefixed with `VITE_` to be exposed to the client.
+
+<Note>
+  All environment variables are read at build time by Vite and embedded into the client bundle. Changes require a rebuild to take effect.
+</Note>
+
+## Environment File Setup
+
+Create a `.env` file in the root of your project:
+
+```bash
+# .env
+VITE_RESERVAS_WS_URL=wss://your-server.com/ws/reservas
+VITE_RESERVAS_POLLING_MS=30000
+```
+
+<Warning>
+  Never commit your `.env` file to version control. Add it to `.gitignore` to prevent accidentally exposing sensitive configuration.
+</Warning>
+
+## Available Variables
+
+### WebSocket Configuration
+
+<ParamField path="VITE_RESERVAS_WS_URL" type="string" required={false}>
+  WebSocket endpoint URL for real-time reservation synchronization.
+  
+  **Format:** `wss://your-domain.com/ws/reservas`
+  
+  **Default:** Empty string (WebSocket disabled, uses local events + polling)
+  
+  **Example:**
+  ```bash
+  VITE_RESERVAS_WS_URL=wss://macfer.crepesywaffles.com/ws/reservas
+  ```
+  
+  <Accordion title="When is this used?">
+    The WebSocket URL is used by the `useRealtimeSync` hook to establish a persistent connection for receiving real-time updates when reservations change. If not configured, the application falls back to local event broadcasting and polling.
+    
+    **Source:** `src/hooks/useRealtimeSync.js:3`
+  </Accordion>
+</ParamField>
+
+<ParamField path="VITE_RESERVAS_POLLING_MS" type="number" required={false}>
+  Fallback polling interval in milliseconds for checking reservation updates.
+  
+  **Default:** `30000` (30 seconds)
+  
+  **Range:** Recommended between 15000-60000 (15-60 seconds)
+  
+  **Example:**
+  ```bash
+  VITE_RESERVAS_POLLING_MS=30000
+  ```
+  
+  <Accordion title="How does polling work?">
+    Even with WebSocket enabled, the system uses polling as a backup mechanism. The sync loop runs every `VITE_RESERVAS_POLLING_MS` milliseconds and triggers a sync if no other sync source (WebSocket, custom events) has fired recently.
+    
+    **Source:** `src/hooks/useRealtimeSync.js:4,141-148`
+  </Accordion>
+</ParamField>
+
+### API Configuration
+
+<ParamField path="VITE_API_BASE_URL" type="string" required={false}>
+  Base URL for the Strapi API backend.
+  
+  **Default:** Hardcoded in source (`https://macfer.crepesywaffles.com/api`)
+  
+  **Example:**
+  ```bash
+  VITE_API_BASE_URL=https://api.your-domain.com
+  ```
+  
+  <Note>
+    Currently, the API endpoint is hardcoded in `geolocationService.js:13`. To make this configurable, update the code to use:
+    ```javascript
+    const API_URL = import.meta.env.VITE_API_BASE_URL || 'https://macfer.crepesywaffles.com/api';
+    ```
+  </Note>
+</ParamField>
+
+## Environment-Specific Configurations
+
+### Development Environment
+
+For local development with a remote WebSocket server:
+
+```bash
+# .env.development
+VITE_RESERVAS_WS_URL=wss://staging.crepesywaffles.com/ws/reservas
+VITE_RESERVAS_POLLING_MS=15000
+```
+
+### Production Environment
+
+For production deployment:
+
+```bash
+# .env.production
+VITE_RESERVAS_WS_URL=wss://macfer.crepesywaffles.com/ws/reservas
+VITE_RESERVAS_POLLING_MS=30000
+```
+
+### Local Development (No WebSocket)
+
+For local development without WebSocket server:
+
+```bash
+# .env.local
+# Leave VITE_RESERVAS_WS_URL empty to disable WebSocket
+VITE_RESERVAS_POLLING_MS=10000
+```
+
+<Note>
+  Vite automatically loads environment files in this order:
+  1. `.env` - All environments
+  2. `.env.local` - All environments (ignored by git)
+  3. `.env.[mode]` - Specific mode only
+  4. `.env.[mode].local` - Specific mode (ignored by git)
+</Note>
+
+## Accessing Variables in Code
+
+Environment variables are accessed using `import.meta.env`:
+
+<CodeGroup>
+```javascript React Component
+import { useEffect } from 'react';
+
+function MyComponent() {
+  useEffect(() => {
+    const wsUrl = import.meta.env.VITE_RESERVAS_WS_URL;
+    const pollingMs = import.meta.env.VITE_RESERVAS_POLLING_MS;
+    
+    console.log('WebSocket URL:', wsUrl);
+    console.log('Polling interval:', pollingMs);
+  }, []);
+  
+  return <div>Check console for env vars</div>;
+}
+```
+
+```javascript Service File
+// Type conversion for numeric values
+const POLLING_MS = Number(import.meta.env.VITE_RESERVAS_POLLING_MS || 30000);
+const WS_URL = import.meta.env.VITE_RESERVAS_WS_URL || '';
+
+// Default fallback values
+if (!WS_URL) {
+  console.log('WebSocket not configured, using polling only');
+}
+```
+</CodeGroup>
+
+## Validation and Debugging
+
+### Checking Loaded Values
+
+Add this to your application startup to verify configuration:
+
+```javascript
+console.log('Environment Configuration:', {
+  wsUrl: import.meta.env.VITE_RESERVAS_WS_URL || 'Not configured',
+  pollingMs: import.meta.env.VITE_RESERVAS_POLLING_MS || '30000 (default)',
+  mode: import.meta.env.MODE,
+  dev: import.meta.env.DEV,
+  prod: import.meta.env.PROD
+});
+```
+
+### Common Issues
+
+<Accordion title="Variables not updating after changes">
+  **Solution:** Restart the Vite dev server. Environment variables are loaded at startup.
+  
+  ```bash
+  # Stop the server (Ctrl+C) and restart
+  npm run dev
+  ```
+</Accordion>
+
+<Accordion title="Variables showing as undefined">
+  **Checklist:**
+  - Verify variable starts with `VITE_` prefix
+  - Check `.env` file is in project root
+  - Restart dev server after adding new variables
+  - For production, rebuild the application
+  
+  ```bash
+  npm run build
+  ```
+</Accordion>
+
+<Accordion title="WebSocket not connecting">
+  **Debug steps:**
+  1. Verify `VITE_RESERVAS_WS_URL` is set correctly
+  2. Check WebSocket server is running and accessible
+  3. Ensure URL uses `wss://` (secure) or `ws://` protocol
+  4. Open browser console for connection errors
+  
+  Expected log: `✅ WebSocket conectado para reservas`
+</Accordion>
+
+## Build-Time vs Runtime
+
+<Warning>
+  Vite embeds environment variables at **build time**, not runtime. This means:
+  
+  - You cannot change variables without rebuilding
+  - Variables are visible in the client bundle (don't store secrets)
+  - Different builds are needed for different environments
+</Warning>
+
+### For Deployment
+
+Create environment-specific builds:
+
+```bash
+# Development build
+npm run build -- --mode development
+
+# Staging build  
+npm run build -- --mode staging
+
+# Production build
+npm run build -- --mode production
+```
+
+## Security Considerations
+
+<Warning>
+  **Never store sensitive data in environment variables:**
+  - API keys
+  - Authentication tokens
+  - Database credentials
+  - Private encryption keys
+  
+  All `VITE_` variables are embedded in the client bundle and visible to users.
+</Warning>
+
+### Safe Configuration Examples
+
+✅ **Safe** (Public configuration):
+```bash
+VITE_RESERVAS_WS_URL=wss://api.example.com/ws
+VITE_RESERVAS_POLLING_MS=30000
+VITE_APP_VERSION=1.2.3
+```
+
+❌ **Unsafe** (Secrets exposed to client):
+```bash
+VITE_API_SECRET_KEY=abc123xyz  # Never do this!
+VITE_DATABASE_PASSWORD=admin123  # Exposed in bundle!
+```
+
+## Related Configuration
+
+<CardGroup cols={2}>
+  <Card title="Real-time Sync" icon="arrow-right-arrow-left" href="/configuration/realtime-sync">
+    Configure WebSocket connections and sync behavior
+  </Card>
+  <Card title="Geolocation" icon="location-dot" href="/configuration/geolocation">
+    Set up geolocation parameters and workplace coordinates
+  </Card>
+</CardGroup>

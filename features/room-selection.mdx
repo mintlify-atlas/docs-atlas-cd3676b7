@@ -1,0 +1,99 @@
+---
+title: Room Selection
+description: Browse and select coworking rooms in the Crepes & Waffles system
+---
+
+## Overview
+
+The room selection feature allows users to browse available coworking spaces and select the room where they want to make a reservation. Each room displays its capacity, available workstations, and amenity information.
+
+## Browsing Rooms
+
+When you access the room selection page, you'll see a grid of available coworking rooms with the following information:
+
+<Steps>
+  <Step title="View available rooms">
+    The system displays all registered coworking rooms in a card-based grid layout. Each room card shows:
+    - Room name and photo
+    - Total capacity (number of workstations)
+    - Workstations with monitors
+    - Availability status
+  </Step>
+
+  <Step title="Check room details">
+    Each room card displays key information:
+    - **Capacity**: Total number of workstations available
+    - **Monitor availability**: How many stations include support monitors
+    - **Status badge**: "Disponible" (Available) or "No disponible" (Unavailable)
+  </Step>
+
+  <Step title="Select your room">
+    Click on an available room card to proceed to the reservation flow. The card will highlight on hover if the room is available.
+  </Step>
+</Steps>
+
+## Room Card Information
+
+### Availability Indicators
+
+Rooms display different visual states:
+
+- **Available rooms**: Show a green "Disponible" badge and are clickable
+- **Coming soon rooms**: Display "Próximamente" badge with reduced opacity
+- **Unavailable rooms**: Greyed out and non-clickable
+
+<Note>
+Only rooms marked as "Disponible" can be selected for making a reservation.
+</Note>
+
+### Room Features
+
+<CardGroup cols={2}>
+  <Card title="Workstation Capacity" icon="chair">
+    The total number of individual workstations in the room. Displayed as "X puestos" or "X puesto" for singular.
+  </Card>
+
+  <Card title="Monitor Support" icon="monitor">
+    Number of workstations equipped with support monitors. Shown only if monitors are available.
+  </Card>
+</CardGroup>
+
+## Navigation
+
+From the room selection page, you can:
+
+- **Panel button**: Access your reservations dashboard (or admin panel for administrators)
+- **Logout button**: Return to the login screen
+- **Back button**: Navigate to the previous page
+
+<Info>
+The system automatically loads room data from the API, including photos and availability status. If images fail to load, a default placeholder is shown.
+</Info>
+
+## User Experience
+
+### Interactive Elements
+
+1. **Hover effects**: Available room cards scale slightly and show visual feedback on hover
+2. **Visual hierarchy**: Room names are prominently displayed with clear typography
+3. **Icon indicators**: Armchair icons for capacity, monitor icons for equipment
+
+### Loading States
+
+While room data is being fetched:
+- A loading message appears: "Cargando salas…"
+- The grid is hidden until data loads
+- Error messages display if the API is unavailable
+
+<Warning>
+If no rooms are registered in the system, you'll see a message: "No hay salas registradas." Contact your administrator if this occurs.
+</Warning>
+
+## Next Steps
+
+After selecting a room:
+1. You're redirected to the **Reservations** page
+2. The selected room information is passed along
+3. You can choose specific workstations and time slots
+
+See [Reservations](/features/reservations) for the next step in the booking workflow.

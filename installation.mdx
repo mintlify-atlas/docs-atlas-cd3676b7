@@ -1,0 +1,593 @@
+---
+title: 'Installation'
+description: 'Set up Crepes & Waffles Coworking locally in minutes'
+---
+
+## System Requirements
+
+Before installing, ensure your environment meets these requirements:
+
+- **Node.js**: v16.x or higher
+- **npm**: v7.x or higher (comes with Node.js)
+- **Browser**: Modern browser with WebSocket support (Chrome 87+, Firefox 82+, Safari 14+, Edge 88+)
+- **HTTPS**: Required for geolocation features in production
+
+<Tabs>
+  <Tab title="macOS">
+    ```bash
+    # Check Node.js version
+    node --version
+    # v16.0.0 or higher
+    
+    # Check npm version
+    npm --version
+    # v7.0.0 or higher
+    ```
+  </Tab>
+  <Tab title="Linux">
+    ```bash
+    # Check Node.js version
+    node --version
+    # v16.0.0 or higher
+    
+    # Check npm version
+    npm --version
+    # v7.0.0 or higher
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```bash
+    # Check Node.js version
+    node --version
+    # v16.0.0 or higher
+    
+    # Check npm version
+    npm --version
+    # v7.0.0 or higher
+    ```
+  </Tab>
+</Tabs>
+
+## Installation
+
+<Steps>
+
+### Clone the Repository
+
+```bash
+git clone https://github.com/your-org/crepes-waffles-coworking.git
+cd crepes-waffles-coworking
+```
+
+### Install Dependencies
+
+The project uses Vite, React 19, and several key dependencies:
+
+```bash
+npm install
+```
+
+<Note>
+This installs all dependencies from `package.json` including:
+- **React 19**: UI framework
+- **Vite 7**: Build tool and dev server
+- **React Router DOM**: Client-side routing
+- **Axios**: HTTP client for API requests
+- **Ant Design**: UI component library
+- **Day.js**: Date/time manipulation
+- **Tailwind CSS 4**: Utility-first CSS framework
+</Note>
+
+**Key Dependencies:**
+
+```json package.json
+{
+  "dependencies": {
+    "@tailwindcss/vite": "^4.2.1",
+    "antd": "^6.3.1",
+    "axios": "^1.13.6",
+    "dayjs": "^1.11.19",
+    "lucide-react": "^0.577.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "react-icons": "^5.5.0",
+    "react-router-dom": "^7.13.0",
+    "tailwindcss": "^4.2.1",
+    "three": "^0.183.1"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.1.1",
+    "vite": "^7.3.1",
+    "sass": "^1.97.3"
+  }
+}
+```
+
+### Configure Environment Variables
+
+Create a `.env` file in the project root to enable real-time synchronization:
+
+```bash .env
+# WebSocket URL for real-time reservation updates
+# If not set, app falls back to local events + polling
+VITE_RESERVAS_WS_URL=wss://tu-servidor/ws/reservas
+
+# Polling interval in milliseconds (default: 30000)
+# Used as fallback when WebSocket is unavailable
+VITE_RESERVAS_POLLING_MS=30000
+```
+
+<AccordionGroup>
+  <Accordion title="VITE_RESERVAS_WS_URL" icon="plug">
+    **Purpose**: WebSocket endpoint for real-time reservation synchronization
+    
+    **Default**: Not set (uses local events + polling only)
+    
+    **Format**: `wss://your-server/ws/reservas`
+    
+    **Usage in code**:
+    ```jsx src/hooks/useRealtimeSync.js
+    const WS_URL = import.meta.env.VITE_RESERVAS_WS_URL || '';
+    
+    if (!WS_URL) {
+      console.log('ℹ️ WebSocket no configurado. Se usa eventos locales + polling.');
+      return undefined;
+    }
+    
+    const ws = new WebSocket(WS_URL);
+    ws.onmessage = (event) => {
+      const payload = JSON.parse(event.data);
+      if (shouldSyncFromSocketPayload(payload)) {
+        triggerSync('websocket-message');
+      }
+    };
+    ```
+    
+    <Warning>
+    WebSocket connections require `wss://` (secure) in production. Use `ws://` only for local development.
+    </Warning>
+  </Accordion>
+  
+  <Accordion title="VITE_RESERVAS_POLLING_MS" icon="clock">
+    **Purpose**: Backup polling interval when WebSocket is unavailable
+    
+    **Default**: `30000` (30 seconds)
+    
+    **Format**: Number in milliseconds
+    
+    **Usage in code**:
+    ```jsx src/hooks/useRealtimeSync.js
+    const POLLING_MS = Number(import.meta.env.VITE_RESERVAS_POLLING_MS || 30000);
+    
+    useEffect(() => {
+      syncIntervalRef.current = setInterval(() => {
+        const timeSinceLastSync = Date.now() - lastSyncRef.current;
+        
+        if (timeSinceLastSync > POLLING_MS - 5000) {
+          console.log('⏰ Sincronización automática (polling)');
+          triggerSync('polling');
+        }
+      }, POLLING_MS);
+    }, [triggerSync]);
+    ```
+    
+    <Note>
+    Polling acts as a fallback mechanism. For production, configure WebSocket for instant updates.
+    </Note>
+  </Accordion>
+</AccordionGroup>
+
+**Environment Variable Loading:**
+
+Vite automatically loads `.env` files and exposes variables prefixed with `VITE_` to your client code:
+
+```jsx
+// Access in any component or module
+const wsUrl = import.meta.env.VITE_RESERVAS_WS_URL
+const pollingMs = import.meta.env.VITE_RESERVAS_POLLING_MS
+```
+
+### Start Development Server
+
+Run the development server with hot module replacement:
+
+```bash
+npm run dev
+```
+
+```json package.json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "eslint ."
+  }
+}
+```
+
+You should see output similar to:
+
+```bash
+VITE v7.3.1  ready in 487 ms
+
+➜  Local:   http://localhost:5173/
+➜  Network: http://192.168.1.100:5173/
+➜  press h to show help
+```
+
+<Note>
+**Default Port**: Vite runs on `http://localhost:5173`
+
+To use a different port:
+```bash
+vite --port 3000
+```
+</Note>
+
+Open your browser and navigate to `http://localhost:5173`. You should see the ID validation screen.
+
+</Steps>
+
+## Production Build
+
+### Build for Production
+
+Create an optimized production build:
+
+```bash
+npm run build
+```
+
+This generates a `dist/` folder with:
+- Minified JavaScript bundles
+- Optimized CSS
+- Compressed assets
+- Source maps (optional)
+
+**Build Configuration:**
+
+```js vite.config.js
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+})
+```
+
+<Tabs>
+  <Tab title="Build Output">
+    ```bash
+    vite v7.3.1 building for production...
+    ✓ 1247 modules transformed.
+    dist/index.html                   0.45 kB │ gzip:  0.30 kB
+    dist/assets/index-DMz9kI8s.css   98.23 kB │ gzip: 16.45 kB
+    dist/assets/index-BkL9vL2s.js   512.67 kB │ gzip: 165.23 kB
+    ✓ built in 4.35s
+    ```
+  </Tab>
+  <Tab title="Directory Structure">
+    ```
+    dist/
+    ├── index.html
+    ├── assets/
+    │   ├── index-DMz9kI8s.css
+    │   ├── index-BkL9vL2s.js
+    │   ├── mesa-Cx8jK2l9.png
+    │   ├── sillaDis-Ak7nM4p3.png
+    │   ├── sillaLim-Bm9oP5q2.png
+    │   └── sillaOcu-Cn8pQ6r1.png
+    └── favicon.ico
+    ```
+  </Tab>
+</Tabs>
+
+### Preview Production Build
+
+Test the production build locally:
+
+```bash
+npm run preview
+```
+
+This starts a local server serving your production build:
+
+```bash
+➜  Local:   http://localhost:4173/
+➜  Network: http://192.168.1.100:4173/
+```
+
+### Deploy to Production
+
+<CodeGroup>
+
+```bash Vercel
+# Install Vercel CLI
+npm i -g vercel
+
+# Deploy
+vercel --prod
+```
+
+```bash Netlify
+# Install Netlify CLI
+npm i -g netlify-cli
+
+# Deploy
+netlify deploy --prod --dir=dist
+```
+
+```bash Custom Server
+# Build the app
+npm run build
+
+# Copy dist/ to your web server
+scp -r dist/* user@server:/var/www/html/
+
+# Or use rsync
+rsync -avz dist/ user@server:/var/www/html/
+```
+
+</CodeGroup>
+
+<Warning>
+**HTTPS Required for Geolocation**
+
+Geolocation APIs only work over HTTPS in production (or localhost in development). Ensure your deployment uses SSL/TLS certificates.
+</Warning>
+
+## Project Structure
+
+Understand the codebase organization:
+
+```
+src/
+├── App.jsx                    # Main app component with routing
+├── main.jsx                   # Application entry point
+├── api/
+│   └── axiosInstance.js      # Configured Axios instance
+├── assets/
+│   ├── componentes/
+│   │   ├── Validar_cedula.jsx        # ID validation screen
+│   │   ├── Bienvenida.jsx           # Welcome screen
+│   │   ├── Politicas.jsx            # Policies agreement
+│   │   ├── Salas.jsx                # Room selection
+│   │   ├── Reservas.jsx             # Desk reservation
+│   │   ├── Panel.jsx                # Reservation management
+│   │   └── VerificacionAsistencia.jsx # Geolocation check-in
+│   ├── mesa.png              # Table image asset
+│   ├── sillaDis.png          # Available desk icon
+│   ├── sillaLim.png          # Limited desk icon
+│   └── sillaOcu.png          # Occupied desk icon
+├── hooks/
+│   ├── useAutoCancelarReservas.js  # Auto-cancel expired reservations
+│   └── useRealtimeSync.js         # WebSocket + polling sync
+├── utils/
+│   ├── geolocationService.js     # Location verification logic
+│   └── reservasService.js        # Reservation API helpers
+└── styles/
+    └── main.scss              # Global styles
+```
+
+**Key Files:**
+
+<AccordionGroup>
+  <Accordion title="App.jsx" icon="route">
+    Main application routing:
+    ```jsx src/App.jsx
+    import { Routes, Route } from 'react-router-dom'
+    import Validar_cedula from './assets/componentes/Validar_cedula.jsx'
+    import Bienvenida from './assets/componentes/Bienvenida.jsx'
+    import Politicas from './assets/componentes/Politicas.jsx'
+    import Salas from './assets/componentes/Salas.jsx'
+    import Reservas from './assets/componentes/Reservas.jsx'
+    import Panel from './assets/componentes/Panel.jsx'
+    import useAutoCancelarReservas from './hooks/useAutoCancelarReservas.js'
+    
+    function App() {
+      useAutoCancelarReservas(true)
+    
+      return (
+        <div className="App">
+          <Routes>
+            <Route path="/" element={<Validar_cedula />} />
+            <Route path="/bienvenida" element={<Bienvenida />} />
+            <Route path="/politicas" element={<Politicas />} />
+            <Route path="/salas" element={<Salas />} />
+            <Route path="/reservas" element={<Reservas />} />
+            <Route path="/panel" element={<Panel />} />
+          </Routes>
+        </div>
+      );
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="useRealtimeSync.js" icon="arrows-rotate">
+    Real-time synchronization hook:
+    ```jsx src/hooks/useRealtimeSync.js
+    const WS_URL = import.meta.env.VITE_RESERVAS_WS_URL || '';
+    const POLLING_MS = Number(import.meta.env.VITE_RESERVAS_POLLING_MS || 30000);
+    
+    const useRealtimeSync = (onSync) => {
+      // WebSocket connection
+      useEffect(() => {
+        if (!WS_URL) return undefined;
+        
+        const ws = new WebSocket(WS_URL);
+        
+        ws.onmessage = (event) => {
+          const payload = JSON.parse(event.data);
+          if (shouldSyncFromSocketPayload(payload)) {
+            triggerSync('websocket-message');
+          }
+        };
+      }, []);
+      
+      // Polling fallback
+      useEffect(() => {
+        const interval = setInterval(() => {
+          triggerSync('polling');
+        }, POLLING_MS);
+        
+        return () => clearInterval(interval);
+      }, []);
+    };
+    ```
+  </Accordion>
+  
+  <Accordion title="geolocationService.js" icon="location-dot">
+    Geolocation verification utilities:
+    ```jsx src/utils/geolocationService.js
+    export const getWorkplaceInfo = () => ({
+      name: 'Crepes & Waffles Coworking',
+      latitude: 4.6097100,
+      longitude: -74.0817500,
+      radius: 1000, // meters
+    });
+    
+    export const verifyAttendance = async (reserva, options) => {
+      const { workplaceInfo, referenceDate = new Date() } = options;
+      
+      // Check time window (first 25 minutes)
+      const timeInfo = getVerificationTimeInfo(reserva, [], referenceDate);
+      if (!timeInfo.isActive) {
+        return { success: false, message: timeInfo.message };
+      }
+      
+      // Check location
+      const position = await getCurrentPosition();
+      const distance = calculateDistance(
+        position.latitude,
+        position.longitude,
+        workplaceInfo.latitude,
+        workplaceInfo.longitude
+      );
+      
+      if (distance > workplaceInfo.radius) {
+        return {
+          success: false,
+          message: `Estás a ${Math.round(distance)}m. Debes estar dentro de ${workplaceInfo.radius}m.`
+        };
+      }
+      
+      return { success: true, message: 'Verificación exitosa' };
+    };
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Configuration
+
+### API Endpoints
+
+The application connects to these backend services:
+
+```jsx src/assets/componentes/Salas.jsx
+const BASE = 'https://macfer.crepesywaffles.com';
+const API_SALAS = `${BASE}/api/working-salas`;
+```
+
+```jsx src/assets/componentes/Reservas.jsx
+const BASE = 'https://macfer.crepesywaffles.com';
+const API_HORARIOS = `${BASE}/api/working-horarios`;
+const API_RESERVAS = `${BASE}/api/working-reservas`;
+```
+
+```jsx src/assets/componentes/Validar_cedula.jsx
+const API_EMPLEADOS = 'https://apialohav2.crepesywaffles.com/buk/empleados3';
+```
+
+<Warning>
+These endpoints are hardcoded. For a multi-environment setup, consider using environment variables:
+
+```bash .env
+VITE_API_BASE_URL=https://macfer.crepesywaffles.com
+VITE_API_EMPLEADOS_URL=https://apialohav2.crepesywaffles.com
+```
+</Warning>
+
+### Admin Users
+
+Admin users are configured with specific document numbers:
+
+```jsx src/assets/componentes/Panel.jsx
+const ADMINS = ['1028783377', '1019096266'];
+
+const esAdmin = ADMINS.includes(documentoUsuario);
+```
+
+Admins can:
+- View all reservations (not just their own)
+- Manually confirm any pending reservation
+- Bypass the 25-minute confirmation window
+- Reactivate cancelled reservations
+
+### Geolocation Settings
+
+```jsx src/utils/geolocationService.js
+export const getWorkplaceInfo = () => ({
+  name: 'Crepes & Waffles Coworking',
+  latitude: 4.6097100,
+  longitude: -74.0817500,
+  radius: 1000, // Radius in meters
+});
+```
+
+Update these coordinates to match your coworking location.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Complete your first reservation flow
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/reservas-service">
+    Integrate with the backend API
+  </Card>
+  <Card title="Real-time Sync" icon="arrows-rotate" href="/configuration/realtime-sync">
+    Configure WebSocket for instant updates
+  </Card>
+  <Card title="Configuration" icon="cog" href="/configuration/environment">
+    Environment and configuration options
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="npm install fails">
+    **Solution**:
+    1. Clear npm cache: `npm cache clean --force`
+    2. Delete `node_modules` and `package-lock.json`
+    3. Run `npm install` again
+    4. Ensure Node.js version is 16.x or higher
+  </Accordion>
+  
+  <Accordion title="Port 5173 already in use">
+    **Solution**:
+    ```bash
+    # Use a different port
+    vite --port 3000
+    
+    # Or find and kill the process
+    lsof -ti:5173 | xargs kill
+    ```
+  </Accordion>
+  
+  <Accordion title="WebSocket connection failed">
+    **Solution**:
+    1. Verify `VITE_RESERVAS_WS_URL` is correctly set
+    2. Ensure WebSocket server is running
+    3. Check firewall/network settings
+    4. App will fall back to polling if WebSocket fails
+  </Accordion>
+  
+  <Accordion title="Geolocation not working in dev">
+    **Solution**:
+    1. Use `localhost` (not `127.0.0.1` or IP address)
+    2. Enable location permissions in browser
+    3. For LAN testing, use HTTPS with self-signed cert
+  </Accordion>
+</AccordionGroup>

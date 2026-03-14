@@ -1,0 +1,174 @@
+---
+title: 'useRealtimeSync'
+description: 'Real-time synchronization hook for reservations data'
+---
+
+## Overview
+
+The `useRealtimeSync` hook provides real-time synchronization for reservations data using WebSocket connections, custom events, and polling fallback mechanisms. It enables automatic data refresh when changes occur across multiple clients or sessions.
+
+## Signature
+
+```javascript
+const { triggerSync, notifyChange } = useRealtimeSync(onSync)
+```
+
+## Parameters
+
+<ParamField path="onSync" type="function" required>
+  Callback function to execute when synchronization is triggered. This function should refresh or reload your reservations data.
+  
+  ```javascript
+  const cargarReservas = async () => {
+    // Fetch latest reservations
+  };
+  
+  useRealtimeSync(cargarReservas);
+  ```
+</ParamField>
+
+## Return Value
+
+Returns an object with synchronization control methods:
+
+<ResponseField name="triggerSync" type="function">
+  Manually trigger a synchronization operation.
+  
+  **Parameters:**
+  - `source` (string, optional): Source identifier for logging purposes (default: 'manual')
+  
+  ```javascript
+  const { triggerSync } = useRealtimeSync(onSync);
+  triggerSync('user-action');
+  ```
+</ResponseField>
+
+<ResponseField name="notifyChange" type="function">
+  Notify other clients about data changes. Dispatches custom events and sends WebSocket messages to trigger synchronization across all connected clients.
+  
+  ```javascript
+  const { notifyChange } = useRealtimeSync(onSync);
+  
+  // After making changes to reservations
+  await updateReservation(data);
+  notifyChange(); // Notify other clients
+  ```
+</ResponseField>
+
+## How It Works
+
+The hook implements a multi-layered synchronization strategy:
+
+### 1. WebSocket Connection
+
+- Connects to the WebSocket server defined by `VITE_RESERVAS_WS_URL`
+- Listens for messages containing reservation-related events
+- Automatically reconnects with exponential backoff (max 15 seconds)
+- Triggers sync when receiving messages matching:
+  - `working-reservas-updated`
+  - `reservas-updated`
+  - Any message containing `reserva` or `working-reserva`
+
+### 2. Custom Events
+
+Listens for browser custom events:
+- `reservas-updated`
+- `working-reservas-updated`
+
+These events are dispatched by the `notifyChange()` function and other parts of the application.
+
+### 3. Polling Fallback
+
+Automatically polls every 30 seconds (configurable via `VITE_RESERVAS_POLLING_MS`) as a backup mechanism if WebSocket or events fail.
+
+### 4. Debouncing
+
+Synchronization requests are debounced by 120ms to prevent excessive calls when multiple events fire simultaneously.
+
+## Configuration
+
+The hook uses environment variables for configuration:
+
+<ParamField path="VITE_RESERVAS_WS_URL" type="string">
+  WebSocket server URL for real-time updates. If not set, the hook falls back to events and polling only.
+</ParamField>
+
+<ParamField path="VITE_RESERVAS_POLLING_MS" type="number" default="30000">
+  Polling interval in milliseconds for automatic synchronization fallback.
+</ParamField>
+
+## Usage Example
+
+<CodeGroup>
+```javascript Panel Component
+import { useState, useCallback } from 'react';
+import useRealtimeSync from '../../hooks/useRealtimeSync';
+import { getReservas } from '../../utils/reservasService';
+
+function Panel() {
+  const [reservations, setReservations] = useState([]);
+  
+  const cargarReservas = useCallback(async () => {
+    const data = await getReservas();
+    setReservations(data);
+  }, []);
+  
+  // Automatically sync when changes occur
+  useRealtimeSync(cargarReservas);
+  
+  return (
+    <div>
+      {/* Display reservations */}
+    </div>
+  );
+}
+```
+
+```javascript With Manual Control
+import useRealtimeSync from '../../hooks/useRealtimeSync';
+
+function MyComponent() {
+  const { triggerSync, notifyChange } = useRealtimeSync(async () => {
+    console.log('Syncing data...');
+    await refreshData();
+  });
+  
+  const handleUpdate = async () => {
+    await updateReservation(data);
+    notifyChange(); // Notify other clients
+  };
+  
+  const handleManualRefresh = () => {
+    triggerSync('manual-refresh');
+  };
+  
+  return (
+    <button onClick={handleManualRefresh}>Refresh</button>
+  );
+}
+```
+</CodeGroup>
+
+## Cleanup
+
+The hook automatically handles cleanup:
+- Closes WebSocket connections
+- Clears all timers and intervals
+- Removes event listeners
+
+No manual cleanup is required when the component unmounts.
+
+## Notes
+
+<Note>
+  The `onSync` callback is debounced by 120ms to prevent rapid-fire synchronization requests. This improves performance when multiple events occur simultaneously.
+</Note>
+
+<Note>
+  If `VITE_RESERVAS_WS_URL` is not configured, the hook will still function using custom events and polling, but real-time updates across different browser sessions won't work.
+</Note>
+
+## Related
+
+- [useAutoCancelarReservas](/api/use-auto-cancelar) - Automatic reservation cancellation
+- [Reservas Service](/api/reservas-service) - Reservation data management

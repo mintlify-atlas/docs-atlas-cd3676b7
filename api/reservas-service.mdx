@@ -1,0 +1,536 @@
+---
+title: 'Reservas Service'
+description: 'API reference for managing workspace reservations'
+icon: 'calendar-check'
+---
+
+## Overview
+
+The Reservas Service provides a comprehensive API for managing workspace reservations, including creating, updating, canceling, and querying reservations. It handles automatic cancellation of expired reservations and provides real-time updates through custom events.
+
+## Configuration
+
+```javascript
+const API_RESERVAS_ENDPOINT = 'https://macfer.crepesywaffles.com/api/working-reservas';
+const RESERVAS_UPDATED_EVENT = 'working-reservas-updated';
+const PAGE_SIZE = 40000;
+```
+
+---
+
+## Core Functions
+
+### getReservas
+
+Retrieves reservations with optional filtering.
+
+```javascript
+getReservas(filters?: Object): Promise<Array>
+```
+
+<ParamField path="filters" type="object" optional>
+  Filtering options for reservations
+  <ParamField path="filters.cedula" type="string" optional>
+    Filter by user document number
+  </ParamField>
+  <ParamField path="filters.fecha" type="string" optional>
+    Filter by reservation date (YYYY-MM-DD format)
+  </ParamField>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Array>">
+  Array of normalized reservation objects sorted by date and ID
+</ResponseField>
+
+**Example**
+
+```javascript
+import { getReservas } from './utils/reservasService';
+
+// Get all reservations
+const allReservas = await getReservas();
+
+// Filter by date
+const todayReservas = await getReservas({ fecha: '2026-03-14' });
+
+// Filter by user
+const userReservas = await getReservas({ cedula: '123456789' });
+```
+
+---
+
+### getReservasByUsuario
+
+Retrieves all reservations for a specific user by their document number.
+
+```javascript
+getReservasByUsuario(cedula: string): Promise<Array>
+```
+
+<ParamField path="cedula" type="string" required>
+  User's document number (cedula)
+</ParamField>
+
+<ResponseField name="return" type="Promise<Array>">
+  Array of reservations for the specified user
+</ResponseField>
+
+**Example**
+
+```javascript
+import { getReservasByUsuario } from './utils/reservasService';
+
+const userReservas = await getReservasByUsuario('123456789');
+console.log(`User has ${userReservas.length} reservations`);
+```
+
+---
+
+### createReservaRecord
+
+Creates a new reservation record.
+
+```javascript
+createreservaRecord(reservaData: Object): Promise<Object>
+```
+
+<ParamField path="reservaData" type="object" required>
+  Reservation data to create
+  <ParamField path="reservaData.nombre" type="string" required>
+    User's name
+  </ParamField>
+  <ParamField path="reservaData.cedula" type="string" required>
+    User's document number
+  </ParamField>
+  <ParamField path="reservaData.area" type="string" required>
+    User's department/area
+  </ParamField>
+  <ParamField path="reservaData.fecha" type="string" required>
+    Reservation date (YYYY-MM-DD)
+  </ParamField>
+  <ParamField path="reservaData.escritorio" type="string" optional>
+    Desk name
+  </ParamField>
+  <ParamField path="reservaData.escritorioId" type="number" optional>
+    Desk ID
+  </ParamField>
+  <ParamField path="reservaData.horario" type="string" optional>
+    Schedule/shift name
+  </ParamField>
+  <ParamField path="reservaData.turno" type="string" optional>
+    Shift identifier
+  </ParamField>
+  <ParamField path="reservaData.horaInicio" type="string" optional>
+    Start time (HH:MM:SS)
+  </ParamField>
+  <ParamField path="reservaData.horaFin" type="string" optional>
+    End time (HH:MM:SS)
+  </ParamField>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Object>">
+  The created reservation object with normalized fields
+</ResponseField>
+
+**Example**
+
+```javascript
+import { createReservaRecord } from './utils/reservasService';
+
+const newReserva = await createReservaRecord({
+  nombre: 'Juan Pérez',
+  cedula: '123456789',
+  area: 'Technology',
+  fecha: '2026-03-15',
+  escritorio: 'Escritorio 1',
+  escritorioId: 1,
+  horario: 'Turno 1',
+  turno: 'manana',
+  horaInicio: '08:00:00',
+  horaFin: '12:00:00'
+});
+```
+
+---
+
+### updateReservaRecord
+
+Updates an existing reservation record.
+
+```javascript
+updateReservaRecord(id: string|number, reservaData: Object, currentReserva?: Object): Promise<Object>
+```
+
+<ParamField path="id" type="string|number" required>
+  Reservation ID to update
+</ParamField>
+
+<ParamField path="reservaData" type="object" required>
+  Updated reservation data (partial update supported)
+</ParamField>
+
+<ParamField path="currentReserva" type="object" optional>
+  Current reservation object for merging changes
+</ParamField>
+
+<ResponseField name="return" type="Promise<Object>">
+  The updated reservation object
+</ResponseField>
+
+**Example**
+
+```javascript
+import { updateReservaRecord } from './utils/reservasService';
+
+const updated = await updateReservaRecord(123, {
+  escritorioId: 2,
+  escritorio: 'Escritorio 2'
+});
+```
+
+---
+
+### updateReservaWithVerification
+
+Updates a reservation with verification information (attendance confirmation).
+
+```javascript
+updateReservaWithVerification(id: string|number, updateData: Object, currentReserva?: Object): Promise<Object>
+```
+
+<ParamField path="id" type="string|number" required>
+  Reservation ID to update
+</ParamField>
+
+<ParamField path="updateData" type="object" required>
+  Update data including verification details
+  <ParamField path="updateData.estado" type="string" optional>
+    New status: 'Pendiente', 'Confirmada', or 'Cancelada'
+  </ParamField>
+  <ParamField path="updateData.verificacionAsistencia" type="object" optional>
+    Attendance verification object
+  </ParamField>
+</ParamField>
+
+<ParamField path="currentReserva" type="object" optional>
+  Current reservation object
+</ParamField>
+
+**Example**
+
+```javascript
+import { updateReservaWithVerification } from './utils/reservasService';
+
+const confirmed = await updateReservaWithVerification(123, {
+  estado: 'Confirmada',
+  confirmada: true,
+  verificacionAsistencia: {
+    fecha: new Date().toISOString(),
+    mensaje: 'Confirmación exitosa',
+    tipo: 'confirmacion-gps'
+  }
+});
+```
+
+---
+
+### cancelReserva
+
+Cancels a reservation with an optional cancellation reason.
+
+```javascript
+cancelReserva(id: string|number, currentReserva?: Object, motivo?: string): Promise<Object>
+```
+
+<ParamField path="id" type="string|number" required>
+  Reservation ID to cancel
+</ParamField>
+
+<ParamField path="currentReserva" type="object" optional>
+  Current reservation object
+</ParamField>
+
+<ParamField path="motivo" type="string" optional default="Reserva cancelada por el usuario.">
+  Cancellation reason message
+</ParamField>
+
+<ResponseField name="return" type="Promise<Object>">
+  The canceled reservation object
+</ResponseField>
+
+**Example**
+
+```javascript
+import { cancelReserva } from './utils/reservasService';
+
+const canceled = await cancelReserva(
+  123,
+  null,
+  'Usuario no podrá asistir'
+);
+```
+
+---
+
+### deleteReservaRecord
+
+Permanently deletes a reservation record.
+
+```javascript
+deleteReservaRecord(id: string|number): Promise<boolean>
+```
+
+<ParamField path="id" type="string|number" required>
+  Reservation ID to delete
+</ParamField>
+
+<ResponseField name="return" type="Promise<boolean>">
+  Returns true if deletion was successful
+</ResponseField>
+
+**Example**
+
+```javascript
+import { deleteReservaRecord } from './utils/reservasService';
+
+await deleteReservaRecord(123);
+```
+
+---
+
+## Specialized Query Functions
+
+### getReservasPendientesHoy
+
+Retrieves all pending reservations for today.
+
+```javascript
+getReservasPendientesHoy(): Promise<Array>
+```
+
+<ResponseField name="return" type="Promise<Array>">
+  Array of pending reservations for today
+</ResponseField>
+
+**Example**
+
+```javascript
+import { getReservasPendientesHoy } from './utils/reservasService';
+
+const pending = await getReservasPendientesHoy();
+console.log(`${pending.length} reservations pending confirmation`);
+```
+
+---
+
+### getEscritoriosDisponibles
+
+Returns available desk IDs for a specific date.
+
+```javascript
+getEscritoriosDisponibles(fecha: string): Promise<Array<number>>
+```
+
+<ParamField path="fecha" type="string" required>
+  Date to check availability (YYYY-MM-DD)
+</ParamField>
+
+<ResponseField name="return" type="Promise<Array<number>>">
+  Array of available desk IDs (1-6)
+</ResponseField>
+
+**Example**
+
+```javascript
+import { getEscritoriosDisponibles } from './utils/reservasService';
+
+const available = await getEscritoriosDisponibles('2026-03-15');
+console.log('Available desks:', available); // [1, 3, 5]
+```
+
+---
+
+## Automatic Cancellation
+
+### cancelarReservasVencidas
+
+Automatically cancels expired reservations that were not confirmed within the verification window.
+
+```javascript
+cancelarReservasVencidas(): Promise<Object>
+```
+
+<ResponseField name="return" type="Promise<Object>">
+  Result object with cancellation statistics
+  <ResponseField name="canceled" type="number">
+    Number of reservations that were canceled
+  </ResponseField>
+  <ResponseField name="message" type="string">
+    Summary message of the operation
+  </ResponseField>
+</ResponseField>
+
+**Example**
+
+```javascript
+import { cancelarReservasVencidas } from './utils/reservasService';
+
+const result = await cancelarReservasVencidas();
+console.log(result.message);
+// "3 reserva(s) cancelada(s) automáticamente"
+```
+
+<Info>
+This function should be called periodically (e.g., every 5 minutes) to automatically cancel reservations that were not confirmed within the 25-minute verification window after the shift start time.
+</Info>
+
+---
+
+## Utility Functions
+
+### clearReservasOverlay
+
+Clears the in-memory status cache and emits an update event.
+
+```javascript
+clearReservasOverlay(): boolean
+```
+
+<ResponseField name="return" type="boolean">
+  Returns true when cache is cleared
+</ResponseField>
+
+**Example**
+
+```javascript
+import { clearReservasOverlay } from './utils/reservasService';
+
+clearReservasOverlay();
+```
+
+---
+
+### exportReservasToJSON
+
+Exports all reservations to a JSON file and triggers a download.
+
+```javascript
+exportReservasToJSON(): Promise<boolean>
+```
+
+<ResponseField name="return" type="Promise<boolean>">
+  Returns true when export is complete
+</ResponseField>
+
+**Example**
+
+```javascript
+import { exportReservasToJSON } from './utils/reservasService';
+
+await exportReservasToJSON();
+// Downloads: reservas_backup_2026-03-14.json
+```
+
+---
+
+## Events
+
+### RESERVAS_UPDATED_EVENT
+
+Custom event dispatched when reservations are modified.
+
+```javascript
+const RESERVAS_UPDATED_EVENT = 'working-reservas-updated';
+```
+
+**Listening for Updates**
+
+```javascript
+import { RESERVAS_UPDATED_EVENT } from './utils/reservasService';
+
+window.addEventListener(RESERVAS_UPDATED_EVENT, (event) => {
+  console.log('Reservations updated:', event.detail);
+  // event.detail contains: { timestamp, id, deleted?, cleared? }
+});
+```
+
+---
+
+## Reservation Object Structure
+
+All functions return or accept reservation objects with the following structure:
+
+<ResponseField name="reserva" type="object">
+  <ResponseField name="id" type="string|number">
+    Unique reservation identifier
+  </ResponseField>
+  <ResponseField name="key" type="string|number">
+    Same as id, used for React list keys
+  </ResponseField>
+  <ResponseField name="nombre" type="string">
+    User's full name
+  </ResponseField>
+  <ResponseField name="foto" type="string">
+    User's photo URL
+  </ResponseField>
+  <ResponseField name="cedula" type="string">
+    User's document number
+  </ResponseField>
+  <ResponseField name="area" type="string">
+    User's department or area
+  </ResponseField>
+  <ResponseField name="fecha" type="string">
+    Reservation date (YYYY-MM-DD)
+  </ResponseField>
+  <ResponseField name="estado" type="string">
+    Status: 'Pendiente', 'Confirmada', or 'Cancelada'
+  </ResponseField>
+  <ResponseField name="confirmada" type="boolean|null">
+    Confirmation flag: true, false, or null
+  </ResponseField>
+  <ResponseField name="escritorio" type="string">
+    Desk name/label
+  </ResponseField>
+  <ResponseField name="escritorioId" type="number|null">
+    Desk ID
+  </ResponseField>
+  <ResponseField name="horario" type="string">
+    Schedule/shift name
+  </ResponseField>
+  <ResponseField name="turno" type="string">
+    Shift identifier
+  </ResponseField>
+  <ResponseField name="horaInicio" type="string">
+    Start time (HH:MM:SS)
+  </ResponseField>
+  <ResponseField name="horaFin" type="string">
+    End time (HH:MM:SS)
+  </ResponseField>
+  <ResponseField name="horarioId" type="string|number|null">
+    Schedule ID
+  </ResponseField>
+  <ResponseField name="verificacionAsistencia" type="object|null">
+    Attendance verification object with fecha, mensaje, and tipo fields
+  </ResponseField>
+  <ResponseField name="motivoCancelacion" type="string|null">
+    Cancellation reason if canceled
+  </ResponseField>
+  <ResponseField name="createdAt" type="string|null">
+    Creation timestamp (ISO 8601)
+  </ResponseField>
+  <ResponseField name="updatedAt" type="string|null">
+    Last update timestamp (ISO 8601)
+  </ResponseField>
+</ResponseField>
+
+---
+
+## Status Normalization
+
+The service automatically normalizes status values:
+
+- `true` or `'confirmada'` → `'Confirmada'`
+- `false` or `'cancelada'` → `'Cancelada'`
+- `null` or `'pendiente'` → `'Pendiente'`
+
+This ensures consistent status representation across the application.

@@ -1,0 +1,382 @@
+---
+title: 'Axios Instance'
+description: 'HTTP client configuration for API requests'
+icon: 'network-wired'
+---
+
+## Overview
+
+The Axios Instance provides a pre-configured HTTP client for making API requests to the Crepes & Waffles Coworking backend. It's a singleton instance with default headers and settings.
+
+## Configuration
+
+The instance is created with default JSON content type headers:
+
+```javascript
+import axios from 'axios';
+
+const axiosInstance = axios.create({
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
+
+export default axiosInstance;
+```
+
+---
+
+## Import
+
+```javascript
+import axiosInstance from './api/axiosInstance';
+```
+
+---
+
+## Usage
+
+The instance supports all standard Axios methods:
+
+### GET Request
+
+```javascript
+import axiosInstance from './api/axiosInstance';
+
+const response = await axiosInstance.get('/api/working-reservas', {
+  params: {
+    'filters[documento][$eq]': '123456789',
+    populate: '*'
+  }
+});
+
+console.log(response.data);
+```
+
+### POST Request
+
+```javascript
+import axiosInstance from './api/axiosInstance';
+
+const response = await axiosInstance.post('/api/working-reservas', {
+  data: {
+    Nombre: 'Juan Pérez',
+    documento: '123456789',
+    area: 'Technology',
+    fecha_reserva: '2026-03-15',
+    estado: null
+  }
+});
+
+console.log('Created:', response.data);
+```
+
+### PUT Request
+
+```javascript
+import axiosInstance from './api/axiosInstance';
+
+const response = await axiosInstance.put(
+  '/api/working-reservas/123',
+  {
+    data: {
+      estado: true // Confirm reservation
+    }
+  }
+);
+
+console.log('Updated:', response.data);
+```
+
+### DELETE Request
+
+```javascript
+import axiosInstance from './api/axiosInstance';
+
+await axiosInstance.delete('/api/working-reservas/123');
+console.log('Deleted');
+```
+
+---
+
+## Request Configuration
+
+You can override or extend the default configuration per request:
+
+### Custom Headers
+
+```javascript
+const response = await axiosInstance.get('/api/endpoint', {
+  headers: {
+    'Authorization': 'Bearer token123',
+    'X-Custom-Header': 'value'
+  }
+});
+```
+
+### Request Timeout
+
+```javascript
+const response = await axiosInstance.get('/api/endpoint', {
+  timeout: 5000 // 5 seconds
+});
+```
+
+### Response Type
+
+```javascript
+const response = await axiosInstance.get('/api/export', {
+  responseType: 'blob' // For file downloads
+});
+```
+
+---
+
+## Error Handling
+
+Handle errors using try-catch blocks:
+
+```javascript
+import axiosInstance from './api/axiosInstance';
+
+try {
+  const response = await axiosInstance.get('/api/working-reservas');
+  console.log(response.data);
+} catch (error) {
+  if (error.response) {
+    // Server responded with error status
+    console.error('Status:', error.response.status);
+    console.error('Data:', error.response.data);
+  } else if (error.request) {
+    // Request made but no response
+    console.error('No response received:', error.request);
+  } else {
+    // Error setting up request
+    console.error('Error:', error.message);
+  }
+}
+```
+
+---
+
+## Interceptors
+
+You can add request or response interceptors for logging, authentication, etc.:
+
+### Request Interceptor
+
+```javascript
+import axiosInstance from './api/axiosInstance';
+
+// Add request logging
+axiosInstance.interceptors.request.use(
+  (config) => {
+    console.log(`${config.method.toUpperCase()} ${config.url}`);
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+```
+
+### Response Interceptor
+
+```javascript
+import axiosInstance from './api/axiosInstance';
+
+// Add response logging
+axiosInstance.interceptors.response.use(
+  (response) => {
+    console.log('Response:', response.status);
+    return response;
+  },
+  (error) => {
+    console.error('Request failed:', error.message);
+    return Promise.reject(error);
+  }
+);
+```
+
+### Authentication Interceptor
+
+```javascript
+import axiosInstance from './api/axiosInstance';
+
+// Add authentication token to all requests
+axiosInstance.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('authToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+```
+
+---
+
+## Integration with Services
+
+The Axios instance is used internally by both the Reservas Service and Geolocation Service:
+
+```javascript
+// From reservasService.js
+import axiosInstance from '../api/axiosInstance';
+
+export const getReservas = async (filters = {}) => {
+  const response = await axiosInstance.get(API_RESERVAS_ENDPOINT, {
+    params: buildQueryParams(filters),
+  });
+  return normalizeCollection(response.data).map(normalizeReserva);
+};
+```
+
+```javascript
+// From geolocationService.js
+import axiosInstance from '../api/axiosInstance';
+
+const fetchReservationsDataset = async () => {
+  const response = await axiosInstance.get(WORKING_RESERVAS_ENDPOINT, {
+    params: {
+      populate: '*',
+      'pagination[pageSize]': 40000,
+    },
+  });
+  return normalizeCollection(response.data);
+};
+```
+
+---
+
+## Default Headers
+
+<ParamField path="Content-Type" type="string" default="application/json">
+  All requests send JSON content type by default
+</ParamField>
+
+---
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Always use try-catch for error handling">
+    ```javascript
+    try {
+      const response = await axiosInstance.get('/api/endpoint');
+      // Handle success
+    } catch (error) {
+      // Handle error
+      console.error('Request failed:', error);
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Use async/await instead of promises">
+    ```javascript
+    // Good
+    const data = await axiosInstance.get('/api/data');
+    
+    // Avoid
+    axiosInstance.get('/api/data').then(response => {
+      // ...
+    });
+    ```
+  </Accordion>
+
+  <Accordion title="Centralize API endpoints">
+    ```javascript
+    const API_BASE = 'https://macfer.crepesywaffles.com/api';
+    const ENDPOINTS = {
+      reservas: `${API_BASE}/working-reservas`,
+      puestos: `${API_BASE}/working-puestos`,
+      horarios: `${API_BASE}/working-horarios`
+    };
+    
+    const response = await axiosInstance.get(ENDPOINTS.reservas);
+    ```
+  </Accordion>
+
+  <Accordion title="Use request cancellation for cleanup">
+    ```javascript
+    import axios from 'axios';
+    import axiosInstance from './api/axiosInstance';
+    
+    const controller = new AbortController();
+    
+    try {
+      const response = await axiosInstance.get('/api/data', {
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (axios.isCancel(error)) {
+        console.log('Request canceled');
+      }
+    }
+    
+    // Cancel request when component unmounts
+    controller.abort();
+    ```
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Common Patterns
+
+### Strapi Query Parameters
+
+The backend uses Strapi, which has specific query parameter formats:
+
+```javascript
+// Filter by field
+const params = {
+  'filters[documento][$eq]': '123456789',
+  'filters[fecha_reserva][$eq]': '2026-03-15'
+};
+
+// Populate relations
+const params = {
+  populate: '*' // All relations
+};
+
+// Pagination
+const params = {
+  'pagination[page]': 1,
+  'pagination[pageSize]': 100
+};
+
+// Sorting
+const params = {
+  'sort[0]': 'fecha_reserva:desc'
+};
+```
+
+### Batch Requests
+
+```javascript
+import axiosInstance from './api/axiosInstance';
+
+const [reservas, puestos, horarios] = await Promise.all([
+  axiosInstance.get('/api/working-reservas'),
+  axiosInstance.get('/api/working-puestos'),
+  axiosInstance.get('/api/working-horarios')
+]);
+```
+
+---
+
+## Related Services
+
+<CardGroup cols={2}>
+  <Card title="Reservas Service" icon="calendar-check" href="/api/reservas-service">
+    Reservation management using this HTTP client
+  </Card>
+  <Card title="Geolocation Service" icon="location-dot" href="/api/geolocation-service">
+    GPS verification using this HTTP client
+  </Card>
+</CardGroup>

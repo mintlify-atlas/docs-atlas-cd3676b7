@@ -1,0 +1,751 @@
+---
+title: 'Geolocation Service'
+description: 'API reference for GPS-based attendance verification'
+icon: 'location-dot'
+---
+
+## Overview
+
+The Geolocation Service provides GPS-based attendance verification for workspace reservations. It validates that users are physically present at the workplace within the allowed radius during the verification time window.
+
+## Configuration
+
+```javascript
+const WORKPLACE_COORDS = {
+  latitude: 4.74488,
+  longitude: -74.04483,
+  name: 'Crepe-Working 1'
+};
+
+const ALLOWED_RADIUS_METERS = 1000;
+const VERIFICATION_WINDOW_MINUTES = 25;
+const AUTO_CANCEL_REASON = '! Usuario no confirmo!';
+```
+
+<Info>
+The verification window starts at the shift's start time and lasts for 25 minutes. Users must confirm attendance within this window.
+</Info>
+
+---
+
+## Core Verification Functions
+
+### verifyAttendance
+
+Verifies user attendance by checking GPS location and time window.
+
+```javascript
+verifyAttendance(reserva: Object, options?: Object): Promise<Object>
+```
+
+<ParamField path="reserva" type="object" required>
+  Reservation object to verify
+</ParamField>
+
+<ParamField path="options" type="object" optional>
+  Verification options
+  <ParamField path="options.horarios" type="array" optional>
+    Array of horario objects (fetched automatically if not provided)
+  </ParamField>
+  <ParamField path="options.position" type="object" optional>
+    GPS position object (obtained automatically if not provided)
+  </ParamField>
+  <ParamField path="options.workplaceInfo" type="object" optional>
+    Workplace coordinates and radius (uses default if not provided)
+  </ParamField>
+  <ParamField path="options.referenceDate" type="Date" optional>
+    Reference date for testing (defaults to current date)
+  </ParamField>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Object>">
+  Verification result object
+  <ResponseField name="success" type="boolean">
+    Whether verification succeeded
+  </ResponseField>
+  <ResponseField name="shouldUpdate" type="boolean">
+    Whether the reservation should be updated
+  </ResponseField>
+  <ResponseField name="newStatus" type="string">
+    New status: 'Confirmada', 'Cancelada', or 'Pendiente'
+  </ResponseField>
+  <ResponseField name="confirmed" type="boolean|null">
+    Confirmation status
+  </ResponseField>
+  <ResponseField name="withinPerimeter" type="boolean" optional>
+    Whether user is within allowed radius
+  </ResponseField>
+  <ResponseField name="message" type="string">
+    Human-readable result message
+  </ResponseField>
+  <ResponseField name="distance" type="number" optional>
+    Distance from workplace in meters
+  </ResponseField>
+  <ResponseField name="position" type="object" optional>
+    GPS position object
+  </ResponseField>
+  <ResponseField name="timeInfo" type="object">
+    Verification time window information
+  </ResponseField>
+  <ResponseField name="alertType" type="string">
+    Alert severity: 'success', 'warning', 'error', or 'info'
+  </ResponseField>
+</ResponseField>
+
+**Example**
+
+```javascript
+import { verifyAttendance } from './utils/geolocationService';
+
+const result = await verifyAttendance(reserva);
+
+if (result.success && result.shouldUpdate) {
+  console.log('✅ Attendance confirmed!');
+  console.log(`Distance: ${result.distance.toFixed(0)} meters`);
+  // Update reservation to "Confirmada" status
+} else {
+  console.log('❌ Verification failed:', result.message);
+}
+```
+
+---
+
+### evaluateReservationStatus
+
+Evaluates whether a pending reservation should be auto-canceled based on time.
+
+```javascript
+evaluateReservationStatus(reserva: Object, horarios?: Array, referenceDate?: Date): Object
+```
+
+<ParamField path="reserva" type="object" required>
+  Reservation object to evaluate
+</ParamField>
+
+<ParamField path="horarios" type="array" optional>
+  Array of schedule objects (uses defaults if not provided)
+</ParamField>
+
+<ParamField path="referenceDate" type="Date" optional default="new Date()">
+  Reference date for evaluation
+</ParamField>
+
+<ResponseField name="return" type="Object">
+  Evaluation result (same structure as verifyAttendance)
+</ResponseField>
+
+**Example**
+
+```javascript
+import { evaluateReservationStatus } from './utils/geolocationService';
+
+const evaluation = evaluateReservationStatus(reserva, horarios);
+
+if (evaluation.shouldUpdate && evaluation.newStatus === 'Cancelada') {
+  console.log('⏰ Reservation expired, should auto-cancel');
+  // Proceed with cancellation
+}
+```
+
+---
+
+## GPS Position Functions
+
+### getCurrentPosition
+
+Gets the user's current GPS position with high accuracy.
+
+```javascript
+getCurrentPosition(): Promise<Object>
+```
+
+<ResponseField name="return" type="Promise<Object>">
+  GPS position object
+  <ResponseField name="latitude" type="number">
+    Latitude coordinate
+  </ResponseField>
+  <ResponseField name="longitude" type="number">
+    Longitude coordinate
+  </ResponseField>
+  <ResponseField name="accuracy" type="number">
+    Position accuracy in meters
+  </ResponseField>
+  <ResponseField name="altitude" type="number|null">
+    Altitude in meters (if available)
+  </ResponseField>
+  <ResponseField name="altitudeAccuracy" type="number|null">
+    Altitude accuracy in meters
+  </ResponseField>
+  <ResponseField name="heading" type="number|null">
+    Direction of travel in degrees
+  </ResponseField>
+  <ResponseField name="speed" type="number|null">
+    Speed in meters per second
+  </ResponseField>
+  <ResponseField name="timestamp" type="number">
+    Timestamp of position reading
+  </ResponseField>
+</ResponseField>
+
+**Example**
+
+```javascript
+import { getCurrentPosition } from './utils/geolocationService';
+
+try {
+  const position = await getCurrentPosition();
+  console.log(`📍 Location: ${position.latitude}, ${position.longitude}`);
+  console.log(`🎯 Accuracy: ${position.accuracy} meters`);
+} catch (error) {
+  console.error('GPS Error:', error.message);
+  console.error('Details:', error.details);
+}
+```
+
+<Warning>
+Requires HTTPS or localhost. Users must grant location permissions. The function includes a 15-second timeout and uses high accuracy GPS.
+</Warning>
+
+---
+
+### calculateDistance
+
+Calculates the distance between two GPS coordinates using the Haversine formula.
+
+```javascript
+calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number
+```
+
+<ParamField path="lat1" type="number" required>
+  Latitude of point 1
+</ParamField>
+
+<ParamField path="lon1" type="number" required>
+  Longitude of point 1
+</ParamField>
+
+<ParamField path="lat2" type="number" required>
+  Latitude of point 2
+</ParamField>
+
+<ParamField path="lon2" type="number" required>
+  Longitude of point 2
+</ParamField>
+
+<ResponseField name="return" type="number">
+  Distance in meters
+</ResponseField>
+
+**Example**
+
+```javascript
+import { calculateDistance } from './utils/geolocationService';
+
+const workplace = { lat: 4.74488, lon: -74.04483 };
+const user = { lat: 4.74500, lon: -74.04490 };
+
+const distance = calculateDistance(
+  user.lat, user.lon,
+  workplace.lat, workplace.lon
+);
+
+console.log(`Distance: ${distance.toFixed(2)} meters`);
+```
+
+---
+
+### isWithinRadius
+
+Checks if a user's coordinates are within the allowed workplace radius.
+
+```javascript
+isWithinRadius(userLat: number, userLon: number): boolean
+```
+
+<ParamField path="userLat" type="number" required>
+  User's latitude
+</ParamField>
+
+<ParamField path="userLon" type="number" required>
+  User's longitude
+</ParamField>
+
+<ResponseField name="return" type="boolean">
+  Returns true if within 1000 meters of workplace
+</ResponseField>
+
+**Example**
+
+```javascript
+import { isWithinRadius, getCurrentPosition } from './utils/geolocationService';
+
+const position = await getCurrentPosition();
+const withinPerimeter = isWithinRadius(position.latitude, position.longitude);
+
+if (withinPerimeter) {
+  console.log('✅ User is at the workplace');
+} else {
+  console.log('❌ User is too far from workplace');
+}
+```
+
+---
+
+## Permission Management
+
+### checkLocationPermission
+
+Checks the current geolocation permission status.
+
+```javascript
+checkLocationPermission(): Promise<string>
+```
+
+<ResponseField name="return" type="Promise<string>">
+  Permission state: 'granted', 'denied', 'prompt', or 'unsupported'
+</ResponseField>
+
+**Example**
+
+```javascript
+import { checkLocationPermission } from './utils/geolocationService';
+
+const status = await checkLocationPermission();
+
+switch (status) {
+  case 'granted':
+    console.log('✅ Location permission granted');
+    break;
+  case 'denied':
+    console.log('❌ Location permission denied');
+    break;
+  case 'prompt':
+    console.log('❓ Permission will be requested');
+    break;
+  case 'unsupported':
+    console.log('⚠️ Permissions API not available (iOS Safari)');
+    break;
+}
+```
+
+---
+
+### requestLocationPermission
+
+Explicitly requests location permission from the user.
+
+```javascript
+requestLocationPermission(): Promise<boolean>
+```
+
+<ResponseField name="return" type="Promise<boolean>">
+  Returns true if permission was granted
+</ResponseField>
+
+**Example**
+
+```javascript
+import { requestLocationPermission } from './utils/geolocationService';
+
+const granted = await requestLocationPermission();
+
+if (granted) {
+  console.log('✅ Permission granted, can verify attendance');
+} else {
+  console.log('❌ Permission denied by user');
+}
+```
+
+---
+
+## Time Window Functions
+
+### getVerificationTimeInfo
+
+Gets detailed information about the verification time window for a reservation.
+
+```javascript
+getVerificationTimeInfo(reserva: Object, horarios?: Array, referenceDate?: Date): Object
+```
+
+<ParamField path="reserva" type="object" required>
+  Reservation object
+</ParamField>
+
+<ParamField path="horarios" type="array" optional>
+  Array of schedule objects
+</ParamField>
+
+<ParamField path="referenceDate" type="Date" optional default="new Date()">
+  Reference date for calculation
+</ParamField>
+
+<ResponseField name="return" type="Object">
+  Time window information
+  <ResponseField name="scheduleResolved" type="boolean">
+    Whether the schedule was successfully resolved
+  </ResponseField>
+  <ResponseField name="isToday" type="boolean">
+    Whether the reservation is for today
+  </ResponseField>
+  <ResponseField name="isBefore" type="boolean">
+    Whether current time is before verification window
+  </ResponseField>
+  <ResponseField name="isActive" type="boolean">
+    Whether verification window is currently active
+  </ResponseField>
+  <ResponseField name="isPast" type="boolean">
+    Whether verification window has expired
+  </ResponseField>
+  <ResponseField name="startTime" type="string">
+    Verification window start time (HH:MM)
+  </ResponseField>
+  <ResponseField name="endTime" type="string">
+    Verification window end time (HH:MM)
+  </ResponseField>
+  <ResponseField name="shiftStartTime" type="string">
+    Shift start time (HH:MM)
+  </ResponseField>
+  <ResponseField name="shiftEndTime" type="string">
+    Shift end time (HH:MM)
+  </ResponseField>
+  <ResponseField name="horario" type="object">
+    Resolved horario object
+  </ResponseField>
+  <ResponseField name="message" type="string">
+    Human-readable status message
+  </ResponseField>
+</ResponseField>
+
+**Example**
+
+```javascript
+import { getVerificationTimeInfo } from './utils/geolocationService';
+
+const timeInfo = getVerificationTimeInfo(reserva, horarios);
+
+if (timeInfo.isActive) {
+  console.log(`✅ Verification window is open until ${timeInfo.endTime}`);
+} else if (timeInfo.isBefore) {
+  console.log(`⏰ Window opens at ${timeInfo.startTime}`);
+} else if (timeInfo.isPast) {
+  console.log(`⏰ Window closed at ${timeInfo.endTime}`);
+}
+```
+
+---
+
+### isWithinVerificationTime
+
+Checks if the current time is within the verification window.
+
+```javascript
+isWithinVerificationTime(reserva: Object, horarios?: Array, referenceDate?: Date): boolean
+```
+
+<ResponseField name="return" type="boolean">
+  Returns true if currently within verification window
+</ResponseField>
+
+---
+
+### isPastVerificationDeadline
+
+Checks if the verification deadline has passed.
+
+```javascript
+isPastVerificationDeadline(reserva: Object, horarios?: Array, referenceDate?: Date): boolean
+```
+
+<ResponseField name="return" type="boolean">
+  Returns true if verification window has expired
+</ResponseField>
+
+---
+
+### isReservationForToday
+
+Checks if a reservation date matches today's date.
+
+```javascript
+isReservationForToday(fechaReserva: string, referenceDate?: Date): boolean
+```
+
+<ParamField path="fechaReserva" type="string" required>
+  Reservation date (YYYY-MM-DD)
+</ParamField>
+
+<ParamField path="referenceDate" type="Date" optional default="new Date()">
+  Reference date to compare against
+</ParamField>
+
+<ResponseField name="return" type="boolean">
+  Returns true if reservation is for today
+</ResponseField>
+
+---
+
+## Metadata Functions
+
+### fetchWorkingHorarios
+
+Fetches available work schedules/shifts from the API with caching.
+
+```javascript
+fetchWorkingHorarios(options?: Object): Promise<Array>
+```
+
+<ParamField path="options" type="object" optional>
+  <ParamField path="options.force" type="boolean" optional default={false}>
+    Force refresh, bypassing cache
+  </ParamField>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Array>">
+  Array of normalized horario objects
+</ResponseField>
+
+**Default Schedules**
+
+```javascript
+[
+  { id: 'manana', nombre: 'Turno 1', inicio: '08:00:00', fin: '12:00:00' },
+  { id: 'tarde', nombre: 'Turno 2', inicio: '12:00:00', fin: '17:00:00' },
+  { id: 'completo', nombre: 'Turno 3', inicio: '08:00:00', fin: '17:00:00' }
+]
+```
+
+**Example**
+
+```javascript
+import { fetchWorkingHorarios } from './utils/geolocationService';
+
+const horarios = await fetchWorkingHorarios();
+console.log(`Loaded ${horarios.length} schedules`);
+
+// Force refresh
+const fresh = await fetchWorkingHorarios({ force: true });
+```
+
+<Info>
+Results are cached for 5 minutes. Falls back to default schedules if API fails.
+</Info>
+
+---
+
+### fetchWorkingPuestos
+
+Fetches available workstations/desks from the API with caching.
+
+```javascript
+fetchWorkingPuestos(options?: Object): Promise<Array>
+```
+
+<ParamField path="options" type="object" optional>
+  <ParamField path="options.force" type="boolean" optional default={false}>
+    Force refresh, bypassing cache
+  </ParamField>
+</ParamField>
+
+<ResponseField name="return" type="Promise<Array>">
+  Array of normalized puesto objects
+  <ResponseField name="id" type="number">
+    Desk ID
+  </ResponseField>
+  <ResponseField name="nombre" type="string">
+    Desk name
+  </ResponseField>
+  <ResponseField name="estado" type="boolean">
+    Desk status (active/inactive)
+  </ResponseField>
+  <ResponseField name="puestoNumero" type="number">
+    Desk number
+  </ResponseField>
+</ResponseField>
+
+**Example**
+
+```javascript
+import { fetchWorkingPuestos } from './utils/geolocationService';
+
+const puestos = await fetchWorkingPuestos();
+puestos.forEach(p => {
+  console.log(`${p.nombre}: ${p.estado ? 'Active' : 'Inactive'}`);
+});
+```
+
+---
+
+## Device Detection
+
+### getDeviceInfo
+
+Detects the user's device type and browser.
+
+```javascript
+getDeviceInfo(): Object
+```
+
+<ResponseField name="return" type="Object">
+  Device information
+  <ResponseField name="isIOS" type="boolean">
+    Whether device is iPhone/iPad
+  </ResponseField>
+  <ResponseField name="isAndroid" type="boolean">
+    Whether device is Android
+  </ResponseField>
+  <ResponseField name="isMobile" type="boolean">
+    Whether device is mobile
+  </ResponseField>
+  <ResponseField name="isDesktop" type="boolean">
+    Whether device is desktop
+  </ResponseField>
+  <ResponseField name="browser" type="object">
+    Browser information with isSafari, isChrome, isFirefox, isEdge, and name
+  </ResponseField>
+</ResponseField>
+
+**Example**
+
+```javascript
+import { getDeviceInfo } from './utils/geolocationService';
+
+const device = getDeviceInfo();
+console.log(`Device: ${device.isMobile ? 'Mobile' : 'Desktop'}`);
+console.log(`Browser: ${device.browser.name}`);
+```
+
+---
+
+### checkGeolocationSupport
+
+Checks if the device and browser support geolocation.
+
+```javascript
+checkGeolocationSupport(): Object
+```
+
+<ResponseField name="return" type="Object">
+  Support information
+  <ResponseField name="supported" type="boolean">
+    Whether geolocation is supported
+  </ResponseField>
+  <ResponseField name="hasPermissionsAPI" type="boolean">
+    Whether Permissions API is available
+  </ResponseField>
+  <ResponseField name="isSecureContext" type="boolean">
+    Whether context is secure (HTTPS)
+  </ResponseField>
+  <ResponseField name="warnings" type="array">
+    Array of warning messages
+  </ResponseField>
+</ResponseField>
+
+**Example**
+
+```javascript
+import { checkGeolocationSupport } from './utils/geolocationService';
+
+const support = checkGeolocationSupport();
+
+if (!support.supported) {
+  console.error('❌ Geolocation not supported');
+} else if (!support.isSecureContext) {
+  console.warn('⚠️ Requires HTTPS');
+}
+
+support.warnings.forEach(w => console.warn(w));
+```
+
+---
+
+### getPermissionInstructions
+
+Provides device-specific instructions for enabling location permissions.
+
+```javascript
+getPermissionInstructions(): Object
+```
+
+<ResponseField name="return" type="Object">
+  Instructions object
+  <ResponseField name="title" type="string">
+    Instruction title
+  </ResponseField>
+  <ResponseField name="steps" type="array">
+    Array of step-by-step instructions
+  </ResponseField>
+</ResponseField>
+
+**Example**
+
+```javascript
+import { getPermissionInstructions } from './utils/geolocationService';
+
+const instructions = getPermissionInstructions();
+console.log(instructions.title);
+instructions.steps.forEach((step, i) => {
+  console.log(`${i + 1}. ${step}`);
+});
+```
+
+---
+
+## Information Functions
+
+### getWorkplaceInfo
+
+Returns the workplace coordinates and allowed radius.
+
+```javascript
+getWorkplaceInfo(): Object
+```
+
+<ResponseField name="return" type="Object">
+  Workplace information
+  <ResponseField name="latitude" type="number">
+    Workplace latitude (4.74488)
+  </ResponseField>
+  <ResponseField name="longitude" type="number">
+    Workplace longitude (-74.04483)
+  </ResponseField>
+  <ResponseField name="name" type="string">
+    Workplace name ('Crepe-Working 1')
+  </ResponseField>
+  <ResponseField name="radius" type="number">
+    Allowed radius in meters (1000)
+  </ResponseField>
+  <ResponseField name="radiusKm" type="string">
+    Allowed radius in kilometers ('1.00')
+  </ResponseField>
+</ResponseField>
+
+**Example**
+
+```javascript
+import { getWorkplaceInfo } from './utils/geolocationService';
+
+const workplace = getWorkplaceInfo();
+console.log(`${workplace.name}: ${workplace.radiusKm} km radius`);
+```
+
+---
+
+## Exported Constants
+
+```javascript
+import {
+  WORKPLACE_LOCATION,
+  VERIFICATION_RADIUS,
+  VERIFICATION_HOURS
+} from './utils/geolocationService';
+
+console.log(WORKPLACE_LOCATION);
+// { latitude: 4.74488, longitude: -74.04483, name: 'Crepe-Working 1' }
+
+console.log(VERIFICATION_RADIUS);
+// 1000
+
+console.log(VERIFICATION_HOURS);
+// { windowMinutes: 25 }
+```

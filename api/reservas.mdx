@@ -1,0 +1,362 @@
+---
+title: 'Reservas Component'
+description: 'Interactive desk reservation system with real-time availability'
+icon: 'calendar-check'
+---
+
+## Overview
+
+The `Reservas` component is the core booking interface where users select desks and time slots. It features an interactive desk map, real-time availability checking, and desk rotation enforcement.
+
+**Route:** `/reservas`
+
+## Component Purpose
+
+- Interactive visual desk selection with map interface
+- Real-time availability display for each desk
+- Time slot selection (Morning, Afternoon, Full Day)
+- Desk rotation enforcement (prevents booking same desk consecutively)
+- Geofencing for booking time restrictions
+- Admin override capabilities
+
+## Key Constants
+
+```javascript API & Configuration
+const BASE         = 'https://macfer.crepesywaffles.com';
+const API_HORARIOS = `${BASE}/api/working-horarios`;
+const API_RESERVAS = `${BASE}/api/working-reservas`;
+
+const CON_MONITOR = [1, 3, 6];  // Desks with monitors
+const ADMINS      = ['1028783377'];
+const H_AM        = 1;   // Morning shift
+const H_PM        = 2;   // Afternoon shift
+const H_COMPLETO  = 3;   // Full day
+```
+
+## Time Slot Configuration
+
+<ParamField path="HORARIO_META" type="object">
+  Defines time slot labels and schedules
+  
+  ```javascript
+  {
+    1: { label: 'Mañana',      hora: '8:00 am – 12:00 m' },
+    2: { label: 'Tarde',       hora: '1:00 pm – 5:00 pm' },
+    3: { label: 'Día completo', hora: '8:00 am – 5:00 pm' }
+  }
+  ```
+</ParamField>
+
+## State Management
+
+### Core State
+
+<ParamField path="fechaIndex" type="number">
+  Index of selected date (0 = today, 1 = tomorrow)
+</ParamField>
+
+<ParamField path="horarios" type="array">
+  Available time slots fetched from API
+</ParamField>
+
+<ParamField path="reservas" type="array">
+  Current reservations for selected date
+</ParamField>
+
+<ParamField path="selectedId" type="number | null">
+  Currently selected desk ID (1-6)
+</ParamField>
+
+<ParamField path="hoverId" type="number | null">
+  Desk ID currently being hovered
+</ParamField>
+
+### Booking State
+
+<ParamField path="reservando" type="boolean">
+  True while creating reservation
+</ParamField>
+
+<ParamField path="reservaOk" type="boolean">
+  Successful reservation indicator
+</ParamField>
+
+<ParamField path="reservaErr" type="string | null">
+  Error message from reservation attempt
+</ParamField>
+
+### Rotation State
+
+<ParamField path="loadingRotacion" type="boolean">
+  True while checking rotation rules
+</ParamField>
+
+<ParamField path="ultimaReservaPrevia" type="object | null">
+  User's last reservation (for rotation enforcement)
+  
+  ```javascript
+  { puestoId: number, fecha: string }
+  ```
+</ParamField>
+
+## Desk Layout Configuration
+
+```javascript Desk Positions
+const SILLAS = [
+  { id: 1, top: '-5%',  left: '0%',   rotate: '-15deg' },
+  { id: 2, top: '-25%', left: '45%',  rotate: '25deg'  },
+  { id: 3, top: '-25%', left: '70%',  rotate: '-20deg' },
+  { id: 4, top: '95%',  left: '0%',   rotate: '210deg' },
+  { id: 5, top: '75%',  left: '40%',  rotate: '180deg' },
+  { id: 6, top: '75%',  right: '15%', rotate: '210deg' },
+];
+```
+
+## Date Generation
+
+Generates next 2 business days (excludes weekends):
+
+<CodeGroup>
+```javascript Generate Business Days
+const generarFechasHabiles = (n = 2) => {
+  const fechas = [];
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+  let cursor = new Date(hoy);
+  
+  while (fechas.length < n) {
+    const dow = cursor.getDay();
+    if (dow !== 0 && dow !== 6) {  // Skip weekends
+      fechas.push({
+        date: new Date(cursor),
+        iso: cursor.toISOString().split('T')[0],
+        label: `${DIAS_CORTO[dow]}. ${dd}/${mm}`,
+        chipLabel: formatoFecha,
+      });
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return fechas;
+};
+```
+</CodeGroup>
+
+## Availability Logic
+
+### Desk States
+
+<Tabs>
+  <Tab title="Disponible">
+    - No active reservations
+    - Green chair icon
+    - All time slots available
+  </Tab>
+  <Tab title="Limitado">
+    - Partially booked (AM or PM only)
+    - Yellow chair icon
+    - Some time slots blocked
+  </Tab>
+  <Tab title="Ocupado">
+    - Fully booked for the day
+    - Red chair icon
+    - No time slots available
+  </Tab>
+</Tabs>
+
+### Slot Blocking Logic
+
+```javascript Calculate Blocked Slots
+const turnosBloqueados = (reservas, puestoId) => {
+  const bloq = new Set();
+  reservas
+    .filter(r => getPuestoId(r) === puestoId && esReservaActiva(r))
+    .forEach(r => {
+      const hId = getHorarioId(r);
+      if (hId === H_AM)            { bloq.add(H_AM);  bloq.add(H_COMPLETO); }
+      else if (hId === H_PM)       { bloq.add(H_PM);  bloq.add(H_COMPLETO); }
+      else if (hId === H_COMPLETO) { bloq.add(H_AM);  bloq.add(H_PM); bloq.add(H_COMPLETO); }
+    });
+  return bloq;
+};
+```
+
+<Note>
+  If a desk has AM booked, both AM and Full Day are blocked. If Full Day is booked, all slots are blocked.
+</Note>
+
+## Rotation Enforcement
+
+Prevents users from booking the same desk on consecutive booking days:
+
+<CodeGroup>
+```javascript Check Last Reservation
+useEffect(() => {
+  const documento = String(usuario?.document_number ?? '').trim();
+  
+  setLoadingRotacion(true);
+  fetch(buildUserHistoryUrl(documento, fechaISO))
+    .then(r => r.json())
+    .then(json => {
+      const data = Array.isArray(json.data) ? json.data : [];
+      const ultimaActiva = data.find(esReservaActiva);
+      const puestoId = getPuestoId(ultimaActiva);
+      const fecha = ultimaActiva?.attributes?.fecha_reserva;
+      setUltimaReservaPrevia(puestoId ? { puestoId, fecha } : null);
+    })
+    .finally(() => setLoadingRotacion(false));
+}, [usuario?.document_number, fechaISO]);
+```
+</CodeGroup>
+
+**Rotation Message:**
+```javascript
+const getRotationMessage = (puestoId) => {
+  const fechaUltima = formatFechaIso(ultimaReservaPrevia?.fecha);
+  return `Tu última reserva fue el ${fechaUltima} en el escritorio ${puestoId}. 
+          Debes hacer rotación y elegir otro escritorio.`;
+};
+```
+
+## Booking Time Restrictions
+
+Restricts bookings for day after tomorrow between 12:00 AM - 5:00 AM:
+
+```javascript Time Window Validation
+const currentHour = now.getHours();
+const isEarlyMorning = currentHour < 5;
+const isPasadoMananaOMas = diasDiferencia >= 2;
+
+const canReserveNow = !(isEarlyMorning && isPasadoMananaOMas);
+```
+
+## Reservation Creation
+
+<CodeGroup>
+```javascript Create Reservation
+const handleReservar = async (horarioObj) => {
+  if (!usuario || !selectedId || !horarioObj) return;
+  
+  // Validation checks
+  if (!canReserveNow) { setReservaErr(reserveWindowMessage); return; }
+  if (loadingRotacion) { setReservaErr('Aún estamos validando...'); return; }
+  if (yaReservoHoy) { setReservaErr('Ya tienes una reserva...'); return; }
+  if (ultimoPuestoReservado && selectedId === ultimoPuestoReservado) {
+    setReservaErr(getRotationMessage(selectedId));
+    return;
+  }
+  
+  setReservando(true);
+  setReservaErr(null);
+  
+  try {
+    const body = {
+      data: {
+        Nombre: usuario.nombre,
+        foto: usuario.foto,
+        documento: String(usuario.document_number),
+        area: usuario.area_nombre,
+        fecha_reserva: fechaISO,
+        estado: null,  // Pending status
+        working_puestos: { id: selectedId },
+        working_horarios: { id: horarioObj.id },
+      },
+    };
+    
+    const res = await fetch(API_RESERVAS, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    
+    if (!res.ok) throw new Error(`Error ${res.status}`);
+    
+    setReservaOk(true);
+    window.dispatchEvent(new CustomEvent('working-reservas-updated'));
+    cargarReservas();
+    
+    setTimeout(() => {
+      setSelectedId(null);
+      setReservaOk(false);
+    }, 2500);
+  } catch (err) {
+    setReservaErr(err.message || 'Error al reservar.');
+  } finally {
+    setReservando(false);
+  }
+};
+```
+</CodeGroup>
+
+## OcupantesPanel Component
+
+Shows current desk occupancy in sidebar (desktop) or drawer (mobile):
+
+```jsx Occupancy Display
+const OcupantesPanelContent = ({ reservas }) => (
+  <div>
+    {[1, 2, 3, 4, 5, 6].map(id => {
+      const rp = reservas.filter(r => 
+        getPuestoId(r) === id && esReservaActiva(r)
+      );
+      return (
+        <div key={id}>
+          <span>Escritorio {id}</span>
+          {rp.map(r => (
+            <div key={r.id}>
+              <img src={getFoto(r)} />
+              <span>{getPrimerNombre(r)}</span>
+              <TimeBadge time={meta.badgeKey} />
+            </div>
+          ))}
+        </div>
+      );
+    })}
+  </div>
+);
+```
+
+## BookingCard Component
+
+Confirmation card shown when a desk is selected:
+
+### Features
+
+<ParamField path="User Info" type="section">
+  - Profile photo
+  - Full name (shortened)
+  - Job title and area
+</ParamField>
+
+<ParamField path="Location" type="section">
+  - Desk number
+  - Monitor badge (if applicable)
+</ParamField>
+
+<ParamField path="Time Slot Selection" type="section">
+  - Radio buttons for available slots
+  - Disabled slots shown with reduced opacity
+  - Shows time range for each slot
+</ParamField>
+
+<ParamField path="Feedback Messages" type="section">
+  - Success: "Reservado!"
+  - Error: Specific error message
+  - Warnings: Rotation, time window, etc.
+</ParamField>
+
+## Icons & Visual Elements
+
+- **Calendar**: Date selector
+- **Monitor**: Desk with monitor indicator
+- **Armchair**: My Reservations button
+- **LogOut**: Session logout
+- **ArrowLeft/Right**: Navigation
+- **ChevronLeft/Right**: Date navigation
+- **Ticket**: Desk number indicator
+- **User**: User avatar
+
+## Related Components
+
+- [Salas](/api/salas) - Room selection (previous step)
+- [Panel](/api/panel) - View/manage reservations
+- [ValidarCedula](/api/validar-cedula) - Entry point

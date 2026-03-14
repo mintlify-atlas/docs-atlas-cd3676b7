@@ -1,0 +1,728 @@
+---
+title: Geolocation Configuration
+description: Configure GPS verification, workplace coordinates, geofencing radius, and attendance confirmation for the coworking reservation system.
+---
+
+## Overview
+
+The Crepes & Waffles Coworking system uses GPS-based geolocation to verify user attendance at the coworking space. The `geolocationService` provides functions for:
+
+- Calculating distance between coordinates (Haversine formula)
+- Verifying users are within the allowed radius
+- Managing geolocation permissions
+- Time-window based verification
+- Cross-platform browser compatibility
+
+<Note>
+  Geolocation verification requires HTTPS in production. The Geolocation API only works on secure origins (HTTPS or localhost).
+</Note>
+
+## Workplace Configuration
+
+### Location Coordinates
+
+The coworking space location is hardcoded in the service:
+
+<ParamField path="WORKPLACE_COORDS" type="object">
+  Physical location of the coworking space.
+  
+  ```javascript
+  const WORKPLACE_COORDS = {
+    latitude: 4.74488,
+    longitude: -74.04483,
+    name: 'Crepe-Working 1'
+  };
+  ```
+  
+  **Location:** Bogotá, Colombia  
+  **Source:** `src/utils/geolocationService.js:3-7`
+</ParamField>
+
+<ParamField path="ALLOWED_RADIUS_METERS" type="number" default={1000}>
+  Maximum distance (in meters) from workplace to confirm attendance.
+  
+  **Default:** 1000 meters (1 kilometer)
+  
+  Users must be within this radius to confirm their reservation.
+  
+  **Source:** `src/utils/geolocationService.js:9`
+</ParamField>
+
+### Customizing Location
+
+To configure for a different location, update the constants:
+
+<CodeGroup>
+```javascript geolocationService.js
+// Update these constants for your location
+const WORKPLACE_COORDS = {
+  latitude: YOUR_LATITUDE,     // e.g., 40.7128
+  longitude: YOUR_LONGITUDE,   // e.g., -74.0060
+  name: 'Your Coworking Name'  // e.g., 'NYC Coworking Hub'
+};
+
+const ALLOWED_RADIUS_METERS = YOUR_RADIUS; // e.g., 500 for 500 meters
+```
+
+```javascript Environment-based (Recommended)
+// Make it configurable via environment variables
+const WORKPLACE_COORDS = {
+  latitude: Number(import.meta.env.VITE_WORKPLACE_LAT) || 4.74488,
+  longitude: Number(import.meta.env.VITE_WORKPLACE_LON) || -74.04483,
+  name: import.meta.env.VITE_WORKPLACE_NAME || 'Crepe-Working 1'
+};
+
+const ALLOWED_RADIUS_METERS = Number(
+  import.meta.env.VITE_ALLOWED_RADIUS_METERS
+) || 1000;
+```
+</CodeGroup>
+
+<Accordion title="How to find coordinates?">
+  **Google Maps:**
+  1. Open Google Maps
+  2. Right-click on your location
+  3. Click the coordinates to copy them
+  4. Format: `latitude, longitude` (e.g., `4.74488, -74.04483`)
+  
+  **Using browser:**
+  ```javascript
+  navigator.geolocation.getCurrentPosition((pos) => {
+    console.log('Latitude:', pos.coords.latitude);
+    console.log('Longitude:', pos.coords.longitude);
+  });
+  ```
+</Accordion>
+
+## Verification Time Windows
+
+### Time-Based Configuration
+
+<ParamField path="VERIFICATION_WINDOW_MINUTES" type="number" default={25}>
+  Time window (in minutes) after shift start when users can confirm attendance.
+  
+  **Default:** 25 minutes
+  
+  **Example:** If shift starts at 08:00, users can confirm until 08:25.
+  
+  **Source:** `src/utils/geolocationService.js:10`
+</ParamField>
+
+### Default Schedules
+
+The system defines three default shift schedules:
+
+```javascript
+const DEFAULT_HORARIOS = [
+  {
+    id: 'manana',
+    nombre: 'Turno 1',
+    inicio: '08:00:00',
+    fin: '12:00:00'
+  },
+  {
+    id: 'tarde',
+    nombre: 'Turno 2',
+    inicio: '12:00:00',
+    fin: '17:00:00'
+  },
+  {
+    id: 'completo',
+    nombre: 'Turno 3',
+    inicio: '08:00:00',
+    fin: '17:00:00'
+  }
+];
+```
+
+<Accordion title="Verification Window Example">
+  **Morning Shift (Turno 1):**
+  - Start: 08:00
+  - Verification window: 08:00 - 08:25
+  - End: 12:00
+  
+  **User scenarios:**
+  - ✅ User arrives at 08:10 → Can confirm
+  - ✅ User arrives at 08:24 → Can confirm
+  - ❌ User arrives at 08:30 → Too late, auto-cancelled
+  - ❌ User arrives at 07:55 → Too early, must wait
+</Accordion>
+
+### Auto-Cancellation
+
+<ParamField path="AUTO_CANCEL_REASON" type="string" default="! Usuario no confirmo!">
+  Cancellation message when user doesn't confirm within verification window.
+  
+  **Source:** `src/utils/geolocationService.js:11`
+</ParamField>
+
+## Distance Calculation
+
+### Haversine Formula
+
+The system uses the Haversine formula to calculate great-circle distance between two GPS coordinates:
+
+```javascript
+export const calculateDistance = (lat1, lon1, lat2, lon2) => {
+  const R = 6371e3; // Earth radius in meters
+  const φ1 = (lat1 * Math.PI) / 180;
+  const φ2 = (lat2 * Math.PI) / 180;
+  const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+  const Δλ = ((lon2 - lon1) * Math.PI) / 180;
+
+  const a =
+    Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+    Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+  
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c; // Distance in meters
+};
+```
+
+**Accuracy:** Within ~0.5% for most distances (suitable for geofencing)
+
+### Usage Example
+
+<CodeGroup>
+```javascript Basic Distance Check
+import { calculateDistance, WORKPLACE_LOCATION } from '../utils/geolocationService';
+
+const userLat = 4.74500;
+const userLon = -74.04500;
+
+const distance = calculateDistance(
+  userLat,
+  userLon,
+  WORKPLACE_LOCATION.latitude,
+  WORKPLACE_LOCATION.longitude
+);
+
+console.log(`Distance: ${distance.toFixed(2)} meters`);
+// Output: Distance: 23.45 meters
+```
+
+```javascript Radius Check
+import { isWithinRadius } from '../utils/geolocationService';
+
+const userLat = 4.74500;
+const userLon = -74.04500;
+
+if (isWithinRadius(userLat, userLon)) {
+  console.log('✅ User is within allowed radius');
+} else {
+  console.log('❌ User is too far from workplace');
+}
+```
+</CodeGroup>
+
+## Geolocation Permissions
+
+### Permission States
+
+The Geolocation API has three permission states:
+
+| State | Meaning | User Action |
+|-------|---------|-------------|
+| `granted` | User allowed location access | Can use GPS immediately |
+| `denied` | User blocked location access | Must enable in browser settings |
+| `prompt` | User hasn't decided yet | Will show permission dialog |
+| `unsupported` | Browser doesn't support API | Use alternative method |
+
+### Checking Permissions
+
+```javascript
+import { checkLocationPermission } from '../utils/geolocationService';
+
+const status = await checkLocationPermission();
+
+switch (status) {
+  case 'granted':
+    console.log('✅ Permission granted');
+    break;
+  case 'denied':
+    console.log('❌ Permission denied');
+    break;
+  case 'prompt':
+    console.log('⚠️ User needs to allow');
+    break;
+  case 'unsupported':
+    console.log('ℹ️ API not available (iOS Safari)');
+    break;
+}
+```
+
+### Requesting Permissions
+
+<CodeGroup>
+```javascript Request Permission
+import { requestLocationPermission } from '../utils/geolocationService';
+
+const Button = () => {
+  const handleRequest = async () => {
+    const granted = await requestLocationPermission();
+    
+    if (granted) {
+      console.log('✅ Permission granted!');
+      // Proceed with verification
+    } else {
+      console.log('❌ Permission denied');
+      // Show instructions
+    }
+  };
+  
+  return (
+    <button onClick={handleRequest}>
+      Enable Location
+    </button>
+  );
+};
+```
+
+```javascript Get Current Position
+import { getCurrentPosition } from '../utils/geolocationService';
+
+try {
+  const position = await getCurrentPosition();
+  
+  console.log('Latitude:', position.latitude);
+  console.log('Longitude:', position.longitude);
+  console.log('Accuracy:', position.accuracy, 'meters');
+  console.log('Timestamp:', new Date(position.timestamp));
+} catch (error) {
+  console.error('Error:', error.message);
+  console.error('Details:', error.details);
+}
+```
+</CodeGroup>
+
+## Position Options
+
+### GPS Configuration
+
+```javascript
+const options = {
+  enableHighAccuracy: true,  // Use GPS if available
+  timeout: 15000,            // 15 seconds timeout
+  maximumAge: 5000           // Accept 5-second old positions
+};
+```
+
+<ParamField path="enableHighAccuracy" type="boolean" default={true}>
+  Request high-accuracy GPS position (uses more battery).
+  
+  - `true` - Use GPS satellite (higher accuracy, slower, more battery)
+  - `false` - Use WiFi/cell towers (lower accuracy, faster, less battery)
+</ParamField>
+
+<ParamField path="timeout" type="number" default={15000}>
+  Maximum time (ms) to wait for position.
+  
+  **Default:** 15000 (15 seconds)
+  
+  Increased from standard 5s to support slower devices.
+</ParamField>
+
+<ParamField path="maximumAge" type="number" default={5000}>
+  Accept cached positions up to this age (ms).
+  
+  **Default:** 5000 (5 seconds)
+  
+  Prevents requesting GPS for every check.
+</ParamField>
+
+## Attendance Verification
+
+### Complete Verification Flow
+
+```javascript
+import { verifyAttendance } from '../utils/geolocationService';
+
+const handleConfirm = async (reserva) => {
+  try {
+    const result = await verifyAttendance(reserva, {
+      horarios: horariosData,      // Optional: shift schedules
+      referenceDate: new Date(),   // Optional: for testing
+      workplaceInfo: customCoords, // Optional: override defaults
+      position: cachedPosition     // Optional: use cached GPS
+    });
+    
+    if (result.success && result.shouldUpdate) {
+      // Update reservation status
+      await updateReservationStatus(reserva.id, {
+        estado: result.newStatus,
+        confirmada: result.confirmed,
+        verificacionAsistencia: {
+          tipo: 'gps',
+          distancia: result.distance,
+          timestamp: Date.now(),
+          posicion: result.position
+        }
+      });
+      
+      alert(result.message);
+    } else {
+      // Show error or warning
+      alert(result.message);
+    }
+  } catch (error) {
+    console.error('Verification failed:', error);
+  }
+};
+```
+
+### Verification Result Object
+
+<ParamField path="result.success" type="boolean">
+  Whether verification succeeded.
+</ParamField>
+
+<ParamField path="result.shouldUpdate" type="boolean">
+  Whether reservation status should be updated in database.
+</ParamField>
+
+<ParamField path="result.newStatus" type="string">
+  New reservation status: `'Confirmada'`, `'Cancelada'`, or `'Pendiente'`.
+</ParamField>
+
+<ParamField path="result.withinPerimeter" type="boolean">
+  Whether user is within allowed radius.
+</ParamField>
+
+<ParamField path="result.distance" type="number">
+  Distance in meters from workplace.
+</ParamField>
+
+<ParamField path="result.message" type="string">
+  Human-readable message for UI display.
+</ParamField>
+
+<ParamField path="result.timeInfo" type="object">
+  Verification window details:
+  - `isToday` - Reservation is for today
+  - `isActive` - Within verification window
+  - `isPast` - Verification window expired
+  - `startTime` - Window start time (e.g., "08:00")
+  - `endTime` - Window end time (e.g., "08:25")
+</ParamField>
+
+## Browser Compatibility
+
+### Device Detection
+
+```javascript
+import { getDeviceInfo } from '../utils/geolocationService';
+
+const device = getDeviceInfo();
+
+console.log('iOS:', device.isIOS);
+console.log('Android:', device.isAndroid);
+console.log('Mobile:', device.isMobile);
+console.log('Browser:', device.browser.name);
+```
+
+### Platform-Specific Instructions
+
+```javascript
+import { getPermissionInstructions } from '../utils/geolocationService';
+
+const instructions = getPermissionInstructions();
+
+console.log(instructions.title);
+instructions.steps.forEach((step, i) => {
+  console.log(`${i + 1}. ${step}`);
+});
+```
+
+**Example output for iOS:**
+```
+Cómo habilitar ubicación en iOS
+1. Abre Ajustes en tu iPhone/iPad
+2. Busca y toca "Safari" o tu navegador
+3. Toca "Ubicación"
+4. Selecciona "Permitir" o "Permitir al usar la app"
+5. Recarga esta página y vuelve a intentar
+```
+
+### Geolocation Support Check
+
+```javascript
+import { checkGeolocationSupport } from '../utils/geolocationService';
+
+const support = checkGeolocationSupport();
+
+if (!support.supported) {
+  console.error('Geolocation not supported!');
+  support.warnings.forEach(warning => console.warn(warning));
+}
+
+if (!support.isSecureContext) {
+  console.error('HTTPS required for geolocation!');
+}
+```
+
+## Error Handling
+
+### Error Codes
+
+<ParamField path="PERMISSION_DENIED" type="1">
+  User denied location permission.
+  
+  **Solution:** Show browser settings instructions.
+</ParamField>
+
+<ParamField path="POSITION_UNAVAILABLE" type="2">
+  Device cannot determine location.
+  
+  **Causes:** No GPS, WiFi off, poor signal
+  
+  **Solution:** Ask user to enable GPS/WiFi.
+</ParamField>
+
+<ParamField path="TIMEOUT" type="3">
+  Location request timed out.
+  
+  **Solution:** Retry with higher timeout or lower accuracy.
+</ParamField>
+
+### Error Messages
+
+<CodeGroup>
+```javascript Detailed Error Handling
+import { getCurrentPosition } from '../utils/geolocationService';
+
+try {
+  const position = await getCurrentPosition();
+  console.log('Position:', position);
+} catch (error) {
+  console.error('Code:', error.code);
+  console.error('Message:', error.message);
+  console.error('Details:', error.details);
+  
+  // Show user-friendly message
+  alert(`${error.message}\n\n${error.details}`);
+}
+```
+
+```javascript Custom Error UI
+const [error, setError] = useState(null);
+
+const handleVerify = async () => {
+  try {
+    const pos = await getCurrentPosition();
+    // Proceed with verification
+  } catch (err) {
+    setError({
+      title: err.message,
+      description: err.details,
+      code: err.code
+    });
+  }
+};
+
+return (
+  <div>
+    {error && (
+      <Alert type="error">
+        <h3>{error.title}</h3>
+        <p>{error.description}</p>
+      </Alert>
+    )}
+    <button onClick={handleVerify}>Verify Location</button>
+  </div>
+);
+```
+</CodeGroup>
+
+## Testing and Development
+
+### Mock Positions
+
+For testing without GPS:
+
+```javascript
+const mockPosition = {
+  latitude: 4.74488,
+  longitude: -74.04483,
+  accuracy: 10,
+  altitude: null,
+  altitudeAccuracy: null,
+  heading: null,
+  speed: null,
+  timestamp: Date.now()
+};
+
+// Test verification with mock data
+const result = await verifyAttendance(reserva, {
+  position: mockPosition
+});
+```
+
+### Simulating Time Windows
+
+```javascript
+// Test as if it's 8:15 AM (within verification window)
+const testDate = new Date();
+testDate.setHours(8, 15, 0, 0);
+
+const result = await verifyAttendance(reserva, {
+  referenceDate: testDate
+});
+```
+
+### Distance Testing
+
+```javascript
+import { calculateDistance } from '../utils/geolocationService';
+
+const tests = [
+  { lat: 4.74488, lon: -74.04483, expected: 0 },       // Exact location
+  { lat: 4.74500, lon: -74.04500, expected: 23 },      // ~23m away
+  { lat: 4.75000, lon: -74.05000, expected: 800 },     // ~800m away
+  { lat: 4.80000, lon: -74.10000, expected: 9000 },    // ~9km away
+];
+
+const workplace = { lat: 4.74488, lon: -74.04483 };
+
+tests.forEach(test => {
+  const distance = calculateDistance(
+    test.lat,
+    test.lon,
+    workplace.lat,
+    workplace.lon
+  );
+  console.log(`Expected: ${test.expected}m, Got: ${distance.toFixed(0)}m`);
+});
+```
+
+## API Reference
+
+### Exported Functions
+
+<CodeGroup>
+```javascript Distance & Verification
+import {
+  calculateDistance,
+  isWithinRadius,
+  verifyAttendance
+} from '../utils/geolocationService';
+
+// Calculate distance between two points
+const distance = calculateDistance(lat1, lon1, lat2, lon2);
+
+// Check if within allowed radius
+const withinRadius = isWithinRadius(userLat, userLon);
+
+// Complete verification flow
+const result = await verifyAttendance(reserva, options);
+```
+
+```javascript Permissions
+import {
+  checkLocationPermission,
+  requestLocationPermission,
+  getCurrentPosition
+} from '../utils/geolocationService';
+
+// Check permission status
+const status = await checkLocationPermission();
+// Returns: 'granted' | 'denied' | 'prompt' | 'unsupported'
+
+// Request permission
+const granted = await requestLocationPermission();
+// Returns: boolean
+
+// Get current GPS position
+const position = await getCurrentPosition();
+// Returns: { latitude, longitude, accuracy, ... }
+```
+
+```javascript Time & Schedule
+import {
+  getVerificationTimeInfo,
+  isWithinVerificationTime,
+  isPastVerificationDeadline,
+  evaluateReservationStatus
+} from '../utils/geolocationService';
+
+// Get detailed time window info
+const timeInfo = getVerificationTimeInfo(reserva, horarios);
+
+// Check if within verification window
+const canVerify = isWithinVerificationTime(reserva, horarios);
+
+// Check if deadline passed
+const expired = isPastVerificationDeadline(reserva, horarios);
+
+// Evaluate overall status
+const status = evaluateReservationStatus(reserva, horarios);
+```
+
+```javascript Device & Support
+import {
+  getDeviceInfo,
+  getPermissionInstructions,
+  checkGeolocationSupport,
+  getWorkplaceInfo
+} from '../utils/geolocationService';
+
+// Detect device type
+const device = getDeviceInfo();
+
+// Get platform-specific instructions
+const instructions = getPermissionInstructions();
+
+// Check browser support
+const support = checkGeolocationSupport();
+
+// Get workplace coordinates
+const workplace = getWorkplaceInfo();
+```
+</CodeGroup>
+
+### Exported Constants
+
+```javascript
+import {
+  WORKPLACE_LOCATION,
+  VERIFICATION_RADIUS,
+  VERIFICATION_HOURS
+} from '../utils/geolocationService';
+
+console.log('Workplace:', WORKPLACE_LOCATION);
+// { latitude: 4.74488, longitude: -74.04483, name: 'Crepe-Working 1' }
+
+console.log('Radius:', VERIFICATION_RADIUS);
+// 1000 (meters)
+
+console.log('Window:', VERIFICATION_HOURS);
+// { windowMinutes: 25 }
+```
+
+## Security Considerations
+
+<Warning>
+  **Privacy:** Always inform users why location access is needed. Only request when necessary.
+  
+  **HTTPS:** Geolocation API only works on secure origins (HTTPS or localhost).
+  
+  **Accuracy:** GPS can be spoofed. Don't rely solely on location for critical security decisions.
+</Warning>
+
+### Best Practices
+
+1. **User consent:** Show clear explanation before requesting permission
+2. **Fallback options:** Provide manual check-in alternative
+3. **Error handling:** Graceful degradation when GPS unavailable
+4. **Privacy policy:** Document how location data is used and stored
+5. **Data retention:** Don't store GPS coordinates longer than necessary
+
+## Related Configuration
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="gear" href="/configuration/environment">
+    Configure API endpoints and application settings
+  </Card>
+  <Card title="Real-time Sync" icon="arrow-right-arrow-left" href="/configuration/realtime-sync">
+    WebSocket and polling configuration
+  </Card>
+</CardGroup>

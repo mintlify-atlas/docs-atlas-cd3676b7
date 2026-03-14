@@ -1,0 +1,510 @@
+---
+title: 'Panel Component'
+description: 'Admin panel and user reservation management dashboard'
+icon: 'table-list'
+---
+
+## Overview
+
+The `Panel` component serves as both the user's reservation dashboard and the admin control panel. It displays reservations with filtering, search, and management capabilities including geolocation-based confirmation.
+
+**Route:** `/panel`
+
+## Component Purpose
+
+- View and manage user reservations
+- Admin panel for managing all reservations
+- Geolocation-based reservation confirmation
+- Real-time reservation sync
+- Filter and search reservations
+- Cancel, confirm, or reactivate reservations
+
+## API Integration
+
+### Reservations Endpoint
+
+```javascript
+GET https://macfer.crepesywaffles.com/api/working-reservas
+```
+
+**Query Parameters:**
+- `sort[0]=fecha_reserva:desc`
+- `sort[1]=id:desc`
+- `filters[documento][$eq]={documento}` (non-admin)
+- `filters[fecha_reserva][$eq]={date}` (today only)
+- `populate[working_puestos]`
+- `populate[working_horarios]`
+- `pagination[pageSize]=40000`
+
+## Key Constants
+
+```javascript Configuration
+const BASE = 'https://macfer.crepesywaffles.com';
+const API_RESERVAS = `${BASE}/api/working-reservas`;
+const ADMINS = ['1028783377', '1019096266'];
+
+const HORARIO_META = {
+  1: { label: 'Mañana',      hora: '8:00 am – 12:00 m' },
+  2: { label: 'Tarde',       hora: '1:00 pm – 5:00 pm' },
+  3: { label: 'Día completo', hora: '8:00 am – 5:00 pm' },
+};
+```
+
+## State Management
+
+### Core State
+
+<ParamField path="reservations" type="array">
+  Normalized array of reservation objects
+</ParamField>
+
+<ParamField path="loading" type="boolean">
+  True while fetching reservations
+</ParamField>
+
+<ParamField path="error" type="string">
+  Error message from API failures
+</ParamField>
+
+### Action State
+
+<ParamField path="cancelando" type="number | null">
+  ID of reservation being cancelled
+</ParamField>
+
+<ParamField path="confirmando" type="number | null">
+  ID of reservation being confirmed
+</ParamField>
+
+<ParamField path="reactivando" type="number | null">
+  ID of reservation being reactivated (admin only)
+</ParamField>
+
+### Filter State
+
+<ParamField path="showAllReservations" type="boolean">
+  Toggle between today's reservations and all reservations
+</ParamField>
+
+<ParamField path="searchQuery" type="string">
+  Search term for filtering reservations
+</ParamField>
+
+<ParamField path="filterEstado" type="string">
+  Filter by status: 'todos' | 'Pendiente' | 'Confirmada' | 'Cancelada'
+</ParamField>
+
+<ParamField path="filterSala" type="string">
+  Filter by room ID
+</ParamField>
+
+<ParamField path="adminTab" type="string">
+  Admin tab selection: 'todos' | 'mis' | 'otros'
+</ParamField>
+
+### Geolocation State
+
+<ParamField path="isNearPoint" type="boolean">
+  True if user is within workplace radius
+</ParamField>
+
+<ParamField path="distanceMeters" type="number | null">
+  User's distance from workplace in meters
+</ParamField>
+
+<ParamField path="locationChecking" type="boolean">
+  True while checking geolocation
+</ParamField>
+
+<ParamField path="locationError" type="string">
+  Error message from geolocation check
+</ParamField>
+
+## Reservation Normalization
+
+<CodeGroup>
+```javascript Normalize Reservations
+const normalizadas = data.map(r => {
+  const puestoId = getPuestoId(r);
+  const horarioId = getHorarioId(r);
+  const { salaId, salaNombre } = getSalaInfo(r);
+
+  return {
+    id: r.id,
+    nombre: getNombreCorto(r.attributes?.Nombre),
+    nombreCompleto: getNombreCompleto(r.attributes?.Nombre),
+    foto: r.attributes?.foto ?? null,
+    documento: r.attributes?.documento ?? '—',
+    area: r.attributes?.area ?? '—',
+    fecha: r.attributes?.fecha_reserva ?? '—',
+    estado: getEstadoReserva(r.attributes),
+    confirmada: r.attributes?.estado === true,
+    pendiente: r.attributes?.estado === null,
+    cancelada: r.attributes?.estado === false,
+    motivoCancelacion: r.attributes?.motivo_cancelacion,
+    motivoGestion: r.attributes?.verificacionAsistencia?.mensaje,
+    verificacionAsistencia: r.attributes?.verificacionAsistencia,
+    puestoId,
+    salaId,
+    salaNombre,
+    horarioId,
+    turnoLabel: getHorarioLabel(r, horarioId),
+  };
+});
+```
+</CodeGroup>
+
+## Reservation States
+
+### Estado Values
+
+<Tabs>
+  <Tab title="Pendiente">
+    - `estado: null` in database
+    - Yellow badge
+    - Awaiting user confirmation
+    - 25-minute confirmation window
+  </Tab>
+  <Tab title="Confirmada">
+    - `estado: true` in database
+    - Green badge
+    - User confirmed attendance
+    - Includes verification metadata
+  </Tab>
+  <Tab title="Cancelada">
+    - `estado: false` in database
+    - Red badge
+    - Manually cancelled or auto-cancelled
+    - Includes cancellation reason
+  </Tab>
+</Tabs>
+
+## Geolocation-Based Confirmation
+
+Users must be within workplace radius to confirm reservations:
+
+<CodeGroup>
+```javascript Geolocation Check
+const refreshLocationStatus = async (silent = false) => {
+  if (!geoSupport.supported) {
+    setLocationError('Tu navegador no soporta geolocalización.');
+    return;
+  }
+
+  setLocationChecking(true);
+  
+  try {
+    const position = await getCurrentPosition();
+    const distance = calculateDistance(
+      position.latitude,
+      position.longitude,
+      workplaceInfo.latitude,
+      workplaceInfo.longitude
+    );
+
+    setDistanceMeters(distance);
+    setIsNearPoint(distance <= workplaceInfo.radius);
+    setLocationError('');
+  } catch (err) {
+    setLocationError(err?.message || 'No fue posible obtener tu ubicación.');
+    setIsNearPoint(false);
+  } finally {
+    setLocationChecking(false);
+  }
+};
+```
+</CodeGroup>
+
+## Confirmation Time Window
+
+Validates that confirmation happens within 25-minute window:
+
+```javascript Time Validation
+const getConfirmMeta = (reserva) => {
+  const timeInfo = getVerificationTimeInfo(
+    reserva,
+    [],
+    new Date(nowMs)
+  );
+
+  if (!timeInfo.isToday) {
+    return {
+      canByTime: false,
+      blockedMessage: 'Solo puedes confirmar reservas del día de hoy.',
+    };
+  }
+
+  if (!timeInfo.isActive) {
+    return {
+      canByTime: false,
+      blockedMessage: timeInfo.message || 'La ventana de confirmación no está activa.',
+    };
+  }
+
+  const remainingMinutes = timeInfo.verificationEnd
+    ? Math.max(0, Math.ceil((timeInfo.verificationEnd.getTime() - nowMs) / 60000))
+    : null;
+
+  return {
+    canByTime: true,
+    remainingMinutes,
+  };
+};
+```
+
+## Admin Capabilities
+
+### Admin Detection
+
+```javascript
+const esAdmin = ADMINS.includes(documentoUsuario);
+```
+
+### Admin-Only Features
+
+<ParamField path="Manual Confirmation" type="feature">
+  Can confirm any pending reservation without geolocation or time window restrictions
+</ParamField>
+
+<ParamField path="View All Reservations" type="feature">
+  Access to all users' reservations, not just their own
+</ParamField>
+
+<ParamField path="Reactivate Cancelled" type="feature">
+  Can reactivate cancelled reservations
+</ParamField>
+
+<ParamField path="Filter by User" type="feature">
+  Tabs: "Todas" / "Mis reservas" / "Otras"
+</ParamField>
+
+## User Actions
+
+### Confirm Reservation
+
+<CodeGroup>
+```javascript User Confirmation
+const handleConfirmar = async (id) => {
+  const reservaAux = reservations.find(r => r.id === id);
+  
+  // Check location requirement
+  if (!isNearPoint) {
+    alert(`Debes estar dentro de ${workplaceInfo.radius} metros...`);
+    return;
+  }
+
+  setConfirmando(id);
+  
+  try {
+    const evaluation = await verifyAttendance(reservaAux, {
+      workplaceInfo,
+      referenceDate: new Date(nowMs),
+    });
+
+    if (!evaluation.shouldUpdate) {
+      alert(evaluation.message);
+      return;
+    }
+
+    await updateReservaWithVerification(id, {
+      estado: evaluation.newStatus,
+      confirmada: evaluation.newStatus === 'Confirmada',
+      verificacionAsistencia: {
+        fecha: new Date().toISOString(),
+        mensaje: evaluation.message,
+        distancia: evaluation.distance,
+        tipo: 'confirmacion-manual-geolocalizada',
+      },
+    }, reservaAux);
+
+    // Update local state
+    setReservations(prev => /* update logic */);
+    alert(evaluation.message);
+  } finally {
+    setConfirmando(null);
+  }
+};
+```
+</CodeGroup>
+
+### Cancel Reservation
+
+```javascript Cancellation with Reason
+const handleCancelar = async (id, motivoCancelacion) => {
+  setCancelando(id);
+  
+  try {
+    const reservaAux = reservations.find(r => r.id === id);
+    await cancelReserva(id, reservaAux, motivoCancelacion);
+    
+    setReservations(prev =>
+      prev.map(r => r.id === id ? {
+        ...r,
+        estado: 'Cancelada',
+        confirmada: false,
+        motivoCancelacion,
+        verificacionAsistencia: {
+          fecha: new Date().toISOString(),
+          mensaje: motivoCancelacion,
+          tipo: 'cancelacion-manual',
+        },
+      } : r)
+    );
+  } finally {
+    setCancelando(null);
+  }
+};
+```
+
+### Reactivate (Admin Only)
+
+```javascript Admin Reactivation
+const handleReactivar = async (id) => {
+  if (!esAdmin) return;
+
+  setReactivando(id);
+  
+  try {
+    await updateReservaWithVerification(id, {
+      estado: 'Pendiente',
+      confirmada: null,
+      motivoCancelacion: null,
+      verificacionAsistencia: {
+        fecha: new Date().toISOString(),
+        mensaje: 'Reserva reactivada por administrador.',
+        tipo: 'reactivacion-admin',
+        autorizadaPor: documentoUsuario,
+      },
+    }, reservaAux);
+
+    alert('Reserva reactivada.');
+  } finally {
+    setReactivando(null);
+  }
+};
+```
+
+## Filtering & Search
+
+### Combined Filter Logic
+
+```javascript Filter Reservations
+const filteredReservations = useMemo(() => {
+  let result = reservations;
+  
+  // Admin tabs
+  if (esAdmin) {
+    if (adminTab === 'mis') result = result.filter(r => r.documento === documentoUsuario);
+    else if (adminTab === 'otros') result = result.filter(r => r.documento !== documentoUsuario);
+  }
+  
+  // Status filter
+  if (filterEstado !== 'todos') {
+    result = result.filter(r => r.estado === filterEstado);
+  }
+  
+  // Room filter
+  if (filterSala !== 'todas') {
+    result = result.filter(r => String(r.salaId) === filterSala);
+  }
+  
+  // Search query
+  if (searchQuery.trim()) {
+    const q = searchQuery.trim().toLowerCase();
+    result = result.filter(r =>
+      String(r.id).includes(q) ||
+      (r.nombreCompleto ?? '').toLowerCase().includes(q) ||
+      (r.documento ?? '').toLowerCase().includes(q) ||
+      String(r.puestoId ?? '').includes(q)
+    );
+  }
+  
+  return result;
+}, [reservations, esAdmin, adminTab, filterEstado, filterSala, searchQuery]);
+```
+
+## Real-Time Sync
+
+Uses custom hook for automatic updates:
+
+```javascript
+import useRealtimeSync from '../../hooks/useRealtimeSync';
+
+// Inside component
+useRealtimeSync(cargarReservas);
+```
+
+Listens for `working-reservas-updated` custom events dispatched when reservations change.
+
+## UI Components
+
+### ReservaCard (Mobile)
+
+Collapsible card for mobile view:
+
+- Expandable/collapsible with chevron icon
+- Shows desk number and status badge
+- Displays reservation ID
+- Full details in expanded state
+- Action buttons for confirm/cancel/reactivate
+
+### Desktop Table
+
+Full-featured table with columns:
+
+- **ID**: Reservation number with badge
+- **Usuario**: Name and document (admin only)
+- **Fecha**: Date with calendar icon
+- **Sala/Escritorio**: Room and desk number
+- **Turno**: Time slot with clock icon
+- **Estado**: Status badge
+- **Motivo**: Cancellation/management reason
+- **Acción**: Action buttons
+
+## Profile Summary Panel
+
+```jsx Quick Stats
+<div>
+  <div>Pendientes: {pendientes.length}</div>
+  <div>Confirmadas: {confirmadas.length}</div>
+  <div>Canceladas: {canceladas.length}</div>
+  <div>Total: {reservations.length}</div>
+</div>
+```
+
+## Cancellation Modal
+
+Modal dialog for cancellation with required reason:
+
+```jsx Cancellation Dialog
+<textarea
+  value={cancelReason}
+  onChange={(e) => setCancelReason(e.target.value)}
+  placeholder="Escribe el motivo"
+  rows={3}
+/>
+```
+
+<Note>
+  Cancellation reason is required and validated before submission.
+</Note>
+
+## Related Components
+
+- [Reservas](/api/reservas) - Create new reservations
+- [Salas](/api/salas) - Room selection
+- [ValidarCedula](/api/validar-cedula) - Authentication
+
+## Service Dependencies
+
+```javascript
+import { cancelReserva, updateReservaWithVerification } from "../../utils/reservasService";
+import {
+  calculateDistance,
+  checkGeolocationSupport,
+  getCurrentPosition,
+  getVerificationTimeInfo,
+  getWorkplaceInfo,
+  verifyAttendance,
+} from "../../utils/geolocationService";
+```

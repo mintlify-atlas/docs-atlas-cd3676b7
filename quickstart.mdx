@@ -1,80 +1,326 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Get your first coworking reservation up and running in under 5 minutes'
 ---
 
-## Get started in three steps
+<Note>
+This guide walks you through the complete reservation flow: from ID validation to browsing rooms, making a reservation, and confirming your check-in.
+</Note>
 
-Get your documentation site running locally and make your first customization.
+## Overview
 
-### Step 1: Set up your local environment
+Crepes & Waffles Coworking is a SaaS reservation system that enables employees to reserve workspaces with real-time synchronization, geolocation-based check-in, and automatic rotation policies.
 
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+**Key Features:**
+- **Real-time Updates**: WebSocket sync keeps all users up-to-date instantly
+- **Geolocation Check-in**: Confirm your reservation within the first 25 minutes using your device's location
+- **Desk Rotation**: Automatic enforcement of desk rotation policies
+- **Multi-shift Support**: Morning (AM), afternoon (PM), or full-day reservations
+
+## Prerequisites
+
+Before you begin, ensure you have:
+- A valid employee ID (cédula)
+- A device with location services enabled
+- Modern web browser (Chrome, Firefox, Safari, or Edge)
+- Access to the coworking space network
+
+<Steps>
+
+### Step 1: Validate Your ID
+
+Start by entering your employee ID number (cédula) on the login screen.
+
+```jsx src/assets/componentes/Validar_cedula.jsx
+const handleUsuario = async (e) => {
+  e.preventDefault();
+  
+  if (!cedula.trim()) {
+    setError("Por favor ingrese el número de cédula");
+    return;
+  }
+  
+  setLoading(true);
+  setError("");
+  
+  try {
+    const response = await axios.get(
+      `https://apialohav2.crepesywaffles.com/buk/empleados3?documento=${cedula}`
+    );
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+    const empleado = response.data.data[0];
+    const fechaHoraIngreso = new Date();
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
+    navigate("/bienvenida", {
+      state: {
+        datosEmpleado: empleado,
+        fechaHoraIngreso: fechaHoraIngreso.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    setError("Error al validar la cédula.");
+  } finally {
+    setLoading(false);
+  }
+};
+```
 
-### Step 2: Deploy your changes
+**What happens:**
+1. Your ID is validated against the employee API
+2. Your profile data (name, role, area, photo) is retrieved
+3. You're automatically redirected to the welcome screen
 
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+### Step 2: Review Reservation Policies
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
+After validation, you'll see the reservation policies screen. Read and accept the following policies:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Límite de reservas" icon="calendar-check">
+    Only 1 active reservation per day (pending or confirmed)
+  </Card>
+  <Card title="Rotación de puesto" icon="rotate">
+    Must rotate desks daily - cannot choose the same desk on consecutive business days
+  </Card>
+  <Card title="Confirmación por ubicación" icon="location-dot">
+    Must confirm within first 25 minutes of shift, within 1000m perimeter
+  </Card>
+  <Card title="Disponibilidad" icon="clock">
+    Business days only. Between 12:00 AM - 5:00 AM, cannot reserve for day after tomorrow
+  </Card>
 </CardGroup>
 
+```jsx src/assets/componentes/Politicas.jsx
+const politicas = [
+  {
+    titulo: "Límite de reservas",
+    descripcion: "Solo puedes tener 1 reserva activa por día (pendiente o confirmada)"
+  },
+  {
+    titulo: "Rotación de puesto",
+    descripcion: "Debes rotar de puesto cada día hábil. No puedes elegir el mismo puesto en días consecutivos",
+  },
+  {
+    titulo: "Confirmación por ubicación",
+    descripcion: "Debes confirmar el mismo día y dentro de los primeros 25 minutos de tu turno, estando dentro del perímetro permitido (1000 m)",
+  }
+];
+```
+
+### Step 3: Browse Available Rooms
+
+Select from available coworking rooms. Each room displays:
+- Total desk capacity
+- Number of desks with monitors
+- Real-time availability status
+
+```jsx src/assets/componentes/Salas.jsx
+const normalizeSala = (item) => {
+  const a = item.attributes ?? item;
+  
+  return {
+    id:         item.id,
+    nombre:     a.nombre ?? a.name ?? `Sala ${item.id}`,
+    capacidad:  a.capacidad ?? 0,
+    monitores:  a.monitores ?? 0,
+    imagen:     imagenUrl,
+    disponible: a.disponible !== false,
+    ruta:       '/reservas',
+  };
+};
+```
+
+**Room Information:**
+- **Capacity**: Total number of available desks
+- **Monitors**: Desks 1, 3, and 6 include support monitors
+- **Status**: Available, Coming Soon, or Full
+
+### Step 4: Select Your Desk & Time Slot
+
+Choose an available desk and time slot from the interactive desk map.
+
+<Tabs>
+  <Tab title="Desk Selection">
+    ```jsx src/assets/componentes/Reservas.jsx
+    const SILLAS = [
+      { id: 1, top: '-5%',  left: '0%',   rotate: '-15deg' },
+      { id: 2, top: '-25%', left: '45%',  rotate: '25deg'  },
+      { id: 3, top: '-25%', left: '70%',  rotate: '-20deg' },
+      { id: 4, top: '95%',  left: '0%',   rotate: '210deg' },
+      { id: 5, top: '75%',  left: '40%',  rotate: '180deg' },
+      { id: 6, top: '75%',  right: '15%', rotate: '210deg' },
+    ];
+    
+    const CON_MONITOR = [1, 3, 6];
+    ```
+  </Tab>
+  <Tab title="Time Slots">
+    ```jsx src/assets/componentes/Reservas.jsx
+    const HORARIO_META = {
+      1: { label: 'Mañana',      hora: '8:00 am – 12:00 m',  badge: 'AM' },
+      2: { label: 'Tarde',       hora: '1:00 pm – 5:00 pm',  badge: 'PM' },
+      3: { label: 'Día completo', hora: '8:00 am – 5:00 pm',  badge: 'Todo el día' },
+    };
+    ```
+  </Tab>
+</Tabs>
+
+**Desk States:**
+- 🟢 **Available** (Green): All time slots open
+- 🟡 **Limited** (Yellow): Some time slots taken
+- 🔴 **Occupied** (Red): All time slots reserved
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+**Rotation Rule**: If you reserved a desk yesterday, you cannot select the same desk today. The system enforces automatic rotation.
 </Note>
+
+### Step 5: Confirm Your Reservation
+
+Review your selection and click "Reservar" to confirm.
+
+```jsx src/assets/componentes/Reservas.jsx
+const handleReservar = async (horarioObj) => {
+  if (!usuario || !selectedId || !horarioObj) return;
+  
+  // Validation checks
+  if (yaReservoHoy) {
+    setReservaErr('Ya tienes una reserva para este día.');
+    return;
+  }
+  
+  if (ultimoPuestoReservado && selectedId === ultimoPuestoReservado) {
+    setReservaErr(getRotationMessage(selectedId));
+    return;
+  }
+  
+  const body = {
+    data: {
+      Nombre:           usuario.nombre ?? '',
+      foto:             usuario.foto ?? '',
+      documento:        String(usuario.document_number),
+      area:             usuario.area_nombre ?? '',
+      fecha_reserva:    fechaISO,
+      estado:           null,  // Pending
+      working_puestos:  { id: selectedId },
+      working_horarios: { id: horarioObj.id },
+    },
+  };
+  
+  const res = await fetch(API_RESERVAS, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  
+  // Trigger real-time sync
+  window.dispatchEvent(new CustomEvent('working-reservas-updated'));
+};
+```
+
+**What gets stored:**
+- Your employee information (name, ID, photo, area)
+- Reservation date
+- Desk ID and time slot
+- Initial status: `Pending`
+
+### Step 6: Check In with Geolocation
+
+On the day of your reservation, confirm your attendance within the first 25 minutes of your shift.
+
+```jsx src/assets/componentes/VerificacionAsistencia.jsx
+const verify = useCallback(async () => {
+  // Check geolocation support
+  if (!geoSupport.supported) {
+    return {
+      success: false,
+      message: 'Tu navegador no soporta geolocalización.'
+    };
+  }
+  
+  // Request location permission
+  const hasPermission = await requestLocationPermission();
+  if (!hasPermission) {
+    return {
+      success: false,
+      message: 'Debes habilitar la ubicación para confirmar la reserva.'
+    };
+  }
+  
+  // Verify attendance
+  const localVerification = await verifyAttendance(reserva, { workplaceInfo });
+  
+  if (!localVerification.success) {
+    return {
+      success: false,
+      message: localVerification.message
+    };
+  }
+  
+  // Submit verification to API
+  const apiResult = await postVerificarAsistencia({
+    reservaId,
+    lat: position.latitude,
+    lng: position.longitude,
+  });
+  
+  return {
+    success: true,
+    message: 'Reserva confirmada por geolocalización.'
+  };
+}, [reserva, workplaceInfo]);
+```
+
+**Check-in Requirements:**
+1. **Time Window**: Within 25 minutes of shift start
+2. **Location**: Within 1000m radius of coworking space
+3. **Browser Permission**: Location services enabled
+
+<Warning>
+If you don't check in within 25 minutes, your reservation will be automatically cancelled to free up the desk for others.
+</Warning>
+
+</Steps>
+
+## Next Steps
+
+Now that you've completed your first reservation:
+
+<CardGroup cols={2}>
+  <Card title="View Your Reservations" icon="list" href="/features/admin-panel">
+    Access the panel to manage all your reservations
+  </Card>
+  <Card title="Real-time Sync" icon="arrows-rotate" href="/configuration/realtime-sync">
+    Learn how WebSocket keeps everyone in sync
+  </Card>
+  <Card title="Admin Features" icon="shield" href="/features/admin-panel">
+    Explore admin capabilities for managing reservations
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/reservas-service">
+    Integrate with the reservation API
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Location services not available">
+    If your device doesn't support location services or you can't enable them:
+    1. Visit reception desk
+    2. Provide your reservation ID
+    3. Staff will manually confirm your check-in
+  </Accordion>
+  
+  <Accordion title="Cannot select a desk">
+    This usually means:
+    - The desk is fully booked for your selected time
+    - You reserved this desk yesterday (rotation policy)
+    - You already have an active reservation for today
+  </Accordion>
+  
+  <Accordion title="Reservation automatically cancelled">
+    Reservations are auto-cancelled if:
+    - Not confirmed within 25 minutes of shift start
+    - You're outside the 1000m radius during check-in
+    - You attempt to violate rotation policies
+  </Accordion>
+</AccordionGroup>

@@ -1,0 +1,254 @@
+---
+title: Attendance Verification
+description: Geolocation-based check-in system for confirming coworking reservations
+---
+
+## Overview
+
+The attendance verification system uses geolocation to confirm that users are physically present at the coworking space during their reserved time slot. This prevents no-shows and ensures fair workstation allocation.
+
+## How Geolocation Verification Works
+
+<Steps>
+  <Step title="Geolocation check">
+    When you attempt to confirm a reservation, the system requests your device's location.
+  </Step>
+
+  <Step title="Distance calculation">
+    Your coordinates are compared against the workplace's reference point to calculate the distance.
+  </Step>
+
+  <Step title="Radius validation">
+    If you're within the allowed radius (configured in the system), confirmation proceeds. Otherwise, it's blocked.
+  </Step>
+
+  <Step title="Time window check">
+    Verification is only allowed during the active confirmation window (typically 25 minutes before shift start).
+  </Step>
+
+  <Step title="Status update">
+    Upon successful verification, your reservation status changes from "Pendiente" to "Confirmada".
+  </Step>
+</Steps>
+
+## Browser Requirements
+
+### Geolocation Support
+
+Your browser must support the Geolocation API. The system checks compatibility automatically and displays an error if geolocation is unavailable.
+
+<Warning>
+**HTTPS Required**  
+Geolocation only works on secure connections (HTTPS) or localhost. If you're using HTTP in production, the browser will block location access.
+</Warning>
+
+### Permission Flow
+
+1. **Initial request**: Browser prompts for location permission
+2. **Granted**: Verification proceeds with position check
+3. **Denied**: User sees instructions to enable location in browser settings
+
+<Info>
+The system stores the permission status and provides browser-specific instructions for enabling location access if denied.
+</Info>
+
+## Verification States
+
+### Success States
+
+**Confirmada (Confirmed)**  
+You were within the allowed radius during the verification window. Your reservation is now active.
+
+### Blocked States
+
+| State | Reason |
+|-------|--------|
+| **Pendiente** | Outside verification time window |
+| **Pendiente** | Too far from workplace location |
+| **Cancelada** | Failed to verify within allowed window |
+
+## Time Window Rules
+
+### Verification Window
+
+Confirmation is typically allowed **25 minutes before** your shift starts and continues until the shift begins.
+
+**Example for AM shift (8:00 AM start)**:
+- Verification opens: 7:35 AM
+- Verification closes: 8:00 AM
+
+**Example for PM shift (1:00 PM start)**:
+- Verification opens: 12:35 PM
+- Verification closes: 1:00 PM
+
+<Note>
+The exact verification window is configured per time slot (horario) in the system. Check with your administrator for specific times.
+</Note>
+
+### Date Restrictions
+
+- **Today's reservations only**: You can only verify reservations for the current date
+- **No future verification**: Cannot confirm tomorrow's or future reservations
+- **No past verification**: Past reservations cannot be verified
+
+## Distance Requirements
+
+### Workplace Radius
+
+The system defines a geofence around the coworking location. Default configuration:
+
+```javascript
+workplaceInfo = {
+  latitude: 4.70939,    // Workplace coordinates
+  longitude: -74.04725,
+  radius: 100,          // meters
+  name: "Crepas y Waffles Coworking"
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Within Radius" icon="circle-check">
+    Your distance ≤ 100 meters  
+    **Result**: Verification allowed
+  </Card>
+  <Card title="Outside Radius" icon="circle-xmark">
+    Your distance > 100 meters  
+    **Result**: Verification blocked
+  </Card>
+</CardGroup>
+
+## Verification Messages
+
+### Success Messages
+
+- **"Reserva confirmada por geolocalización."**  
+  Standard confirmation message when all checks pass.
+
+- **"Reserva confirmada por administrador."**  
+  Shown when an admin manually confirms your reservation.
+
+### Warning Messages
+
+- **"Debes estar dentro de {radius} metros para confirmar la reserva."**  
+  You're too far from the workplace location.
+
+- **"La ventana de confirmación no está activa."**  
+  The verification time window hasn't opened or has closed.
+
+- **"Solo puedes confirmar reservas del día de hoy."**  
+  You attempted to verify a future or past reservation.
+
+### Error Messages
+
+<Warning>
+**"Tu navegador no soporta geolocalización."**  
+Your browser doesn't support the Geolocation API. Update your browser or use a modern alternative.
+</Warning>
+
+<Warning>
+**"Debes habilitar la ubicación para confirmar la reserva."**  
+Location permissions are denied. Follow the on-screen instructions to enable location access in your browser settings.
+</Warning>
+
+## Permission Instructions
+
+If location is denied, the system provides browser-specific instructions:
+
+### Chrome/Edge
+1. Click the lock icon in the address bar
+2. Set "Location" to "Allow"
+3. Reload the page
+
+### Firefox
+1. Click the permissions icon in the address bar
+2. Enable location access
+3. Reload the page
+
+### Safari
+1. Go to Safari → Settings → Websites
+2. Find Location under permissions
+3. Allow location for this site
+
+## Verification Data Stored
+
+When verification succeeds, the system stores:
+
+```json
+{
+  "fecha": "2026-03-14T15:30:00.000Z",
+  "mensaje": "Reserva confirmada por geolocalizacion.",
+  "distancia": 45.7,
+  "tipo": "confirmacion-manual-geolocalizada",
+  "lat": 4.70950,
+  "lng": -74.04730
+}
+```
+
+<Info>
+This verification data is attached to your reservation and visible to administrators for auditing purposes.
+</Info>
+
+## Auto-Cancellation
+
+If you fail to verify within the allowed window:
+
+1. The system may auto-cancel your reservation
+2. Status changes to "Cancelada"
+3. Cancellation reason is logged
+4. The workstation becomes available for others
+
+<Note>
+Administrators can manually reactivate cancelled reservations if needed. See the [Admin Panel](/features/admin-panel) documentation.
+</Note>
+
+## Component Integration
+
+The `VerificacionAsistencia` component can be used programmatically:
+
+```jsx
+<VerificacionAsistencia
+  reserva={reservationObject}
+  onVerified={(updatedReserva) => console.log('Verified!', updatedReserva)}
+  onStatusChange={(reserva, result) => console.log('Status changed', result)}
+  onAlert={({ type, content }) => showNotification(type, content)}
+  autoSync={true}
+/>
+```
+
+### Controller API
+
+The component provides a controller with:
+
+- `verify()`: Trigger manual verification
+- `loading`: Current loading state
+- `permissionStatus`: "granted", "denied", or "prompt"
+- `lastResult`: Most recent verification result
+- `canVerify`: Boolean indicating if verification is possible
+- `workplaceInfo`: Configured workplace coordinates
+
+## Troubleshooting
+
+### "Geolocation Error: User denied permission"
+
+**Solution**: Enable location permissions in browser settings, then refresh and try again.
+
+### "Position unavailable"
+
+**Solution**: Make sure:
+- GPS/location services are enabled on your device
+- You're not using a VPN that blocks location
+- Your device has location hardware
+
+### "Too far from workplace"
+
+**Solution**: 
+- Ensure you're physically at the coworking location
+- Check if GPS accuracy is poor (try moving near a window)
+- Contact admin if you believe the radius is too restrictive
+
+## Next Steps
+
+After successful verification:
+- Your reservation shows as "Confirmada" in the [Admin Panel](/features/admin-panel)
+- You can access your reserved workstation during your time slot
+- Administrators can see your verification timestamp and location data

@@ -1,0 +1,160 @@
+---
+title: 'ValidarCedula Component'
+description: 'ID validation and employee lookup component for coworking access'
+icon: 'id-card'
+---
+
+## Overview
+
+The `ValidarCedula` component is the entry point of the coworking booking system. It validates employee IDs (cédulas) against the BUK API and initiates the booking flow.
+
+**Route:** `/` (root)
+
+## Component Purpose
+
+- Validates employee identification numbers
+- Fetches employee data from the BUK API
+- Initiates the booking flow by navigating to the welcome screen
+- Records entry timestamp for tracking purposes
+
+## State Management
+
+<ParamField path="cedula" type="string">
+  Stores the ID number input value. Only numeric characters are allowed.
+</ParamField>
+
+<ParamField path="loading" type="boolean">
+  Indicates whether the API validation request is in progress.
+</ParamField>
+
+<ParamField path="error" type="string">
+  Stores error messages for display to the user.
+</ParamField>
+
+## API Integration
+
+### Employee Lookup Endpoint
+
+```javascript
+GET https://apialohav2.crepesywaffles.com/buk/empleados3?documento={cedula}
+```
+
+**Response Structure:**
+```json
+{
+  "data": [
+    {
+      "nombre": "Juan Pérez",
+      "documento": "1234567890",
+      "cargo": "Desarrollador",
+      "area_nombre": "Tecnología",
+      "foto": "https://..."
+    }
+  ]
+}
+```
+
+## Key Functions
+
+### handleUsuario(e)
+
+Processes the form submission and validates the employee ID.
+
+<CodeGroup>
+```javascript Form Submission Handler
+const handleUsuario = async (e) => {
+  e.preventDefault();
+
+  if (!cedula.trim()) {
+    setError("Por favor ingrese el número de cédula");
+    return;
+  }
+
+  setLoading(true);
+  setError("");
+
+  try {
+    const response = await axios.get(
+      `https://apialohav2.crepesywaffles.com/buk/empleados3?documento=${cedula}`
+    );
+
+    const empleado = response.data.data[0];
+    const fechaHoraIngreso = new Date();
+
+    navigate("/bienvenida", {
+      state: {
+        datosEmpleado: empleado,
+        fechaHoraIngreso: fechaHoraIngreso.toISOString(),
+      },
+    });
+  } catch (error) {
+    console.error(error);
+    setError("Error al validar la cédula.");
+  } finally {
+    setLoading(false);
+  }
+};
+```
+</CodeGroup>
+
+### handleCedulaChange(e)
+
+Filters input to allow only numeric characters.
+
+```javascript Input Validation
+const handleCedulaChange = (e) => {
+  const value = e.target.value.replace(/\D/g, "");
+  setCedula(value);
+};
+```
+
+## Navigation Flow
+
+<Note>
+  On successful validation, the component navigates to `/bienvenida` with employee data and entry timestamp in the location state.
+</Note>
+
+**Passed State:**
+- `datosEmpleado`: Full employee object from BUK API
+- `fechaHoraIngreso`: ISO timestamp of entry
+
+## UI Features
+
+- **Input Validation**: Maximum 10 digits, numeric only
+- **Loading State**: Button shows "Validando..." during API call
+- **Error Display**: Shows validation errors below the input
+- **Disabled State**: Button is disabled when input is empty or loading
+
+## Code Example
+
+```jsx Component Structure
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import axios from "axios";
+
+const ValidarCedula = () => {
+  const navigate = useNavigate();
+  const [cedula, setCedula] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  return (
+    <div className="page-wrapper">
+      <div className="bienvenida-card">
+        <h1 className="bienvenida-saludo">
+          ¡Bienvenido a nuestro espacio de <strong>Co-Working</strong>!
+        </h1>
+        <p className="text-muted bienvenida-sub">
+          Ingresa tu cédula para continuar
+        </p>
+        {/* Form content */}
+      </div>
+    </div>
+  );
+};
+```
+
+## Related Components
+
+- [Bienvenida](/api/bienvenida) - Next step in the flow
+- [Salas](/api/salas) - Room selection component
